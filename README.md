@@ -1,4 +1,4 @@
-# dl-adv-group11
+# DD2412 Group 11 Project
 
 ### Project Links:
 - [GCP Vertex AI: Code](https://console.cloud.google.com/vertex-ai/workbench/instances?project=dladvgroup11)
