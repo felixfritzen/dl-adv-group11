@@ -1,0 +1,24 @@
+# Ignore everything, then choose
+*
+
+!*.pdf
+!*.md
+!LICENSE
+!.gitignore
+
+!src/
+!src/*.py
+!src/*.ipynb
+
+
+!models/
+
+!models/weights
+
+!models/loss/
+!models/loss/**
+
+!models/results/
+!models/results/**
+
+!data/
