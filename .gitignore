@@ -7,6 +7,10 @@
 !.gitignore
 
 !src/
+!src/datasets
+
+!src/datasets/*.py
+
 !src/*.py
 !src/*.ipynb
 
