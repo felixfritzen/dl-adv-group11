@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import requests
-
+import torch
+import torch.nn.functional as F
 
 def key2key(dict1, dict2):
     """If targets are the same, maps key to key"""
@@ -54,3 +55,27 @@ def get_info(dataloaders):
     for key in dataloaders.keys():
         print(key, ' Loader ',len(dataloaders[key]),' Set ', len(dataloaders[key].dataset))
 
+
+def kd_loss(student_logits, teacher_logits, temperature=1.0):
+    """Compute the knowledge distillation (KD) loss using KL divergence."""
+    teacher_probs = F.softmax(teacher_logits / temperature, dim=1)
+    student_log_probs = F.log_softmax(student_logits / temperature, dim=1)
+    loss = F.kl_div(student_log_probs, teacher_probs, reduction='batchmean') * (temperature ** 2)
+    return loss
+
+def explanation_loss(student_explanation, teacher_explanation, similarity_metric='cosine'):
+    """Compute explanation loss to match student and teacher explanations."""
+    if similarity_metric == 'cosine':
+        cos_sim = F.cosine_similarity(student_explanation, teacher_explanation, dim=1)
+        loss = 1 - cos_sim.mean()
+    else:
+        raise ValueError("Only cosine similarity is currently supported.")
+    return loss
+
+def e2KD_loss(student_logits, teacher_logits, student_explanation, teacher_explanation, 
+              temperature=1.0, lambda_weight=1.0):
+    """Calculate the total e2KD loss combining KD loss and explanation loss."""
+    kd = kd_loss(student_logits, teacher_logits, temperature)
+    exp_loss = explanation_loss(student_explanation, teacher_explanation)
+    total_loss = kd + lambda_weight * exp_loss
+    return total_loss
