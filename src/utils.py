@@ -56,7 +56,7 @@ def get_info(dataloaders):
         print(key, ' Loader ',len(dataloaders[key]),' Set ', len(dataloaders[key].dataset))
 
 
-def kd_loss(student_logits, teacher_logits, temperature=1.0):
+def kd_loss(student_logits, teacher_logits, temperature):
     """Compute the knowledge distillation (KD) loss using KL divergence."""
     teacher_probs = F.softmax(teacher_logits / temperature, dim=1)
     student_log_probs = F.log_softmax(student_logits / temperature, dim=1)
@@ -73,7 +73,7 @@ def explanation_loss(student_explanation, teacher_explanation, similarity_metric
     return loss
 
 def e2KD_loss(student_logits, teacher_logits, student_explanation, teacher_explanation, 
-              temperature=1.0, lambda_weight=1.0):
+              temperature, lambda_weight):
     """Calculate the total e2KD loss combining KD loss and explanation loss."""
     kd = kd_loss(student_logits, teacher_logits, temperature)
     exp_loss = explanation_loss(student_explanation, teacher_explanation)
