@@ -5,6 +5,7 @@
 - [GCP VM (west4-c): Code](https://console.cloud.google.com/compute/instances?project=dladvgroup11)
 - [Overleaf: Report and Proposal](https://www.overleaf.com/8348522569zxtsgdgjyjhj#0e6ece)
 - [Original Paper Github](https://github.com/m-parchami/GoodTeachersExplain)
+- [Plan](https://docs.google.com/document/d/1InBWlfuf-D_ZZ9Lm_Mk3AEkK3gdsyJsTXbTC69Yy7m8/edit?usp=sharing)
 
 
   
