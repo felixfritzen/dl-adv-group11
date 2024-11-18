@@ -1,9 +1,4 @@
 import torch 
-import requests
-import json
-import os
-from PIL import Image
-import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 import matplotlib.pyplot as plt
@@ -25,13 +20,26 @@ elif torch.backends.mps.is_available(): # For apple silicon
     device = 'mps'
 print("Using device:", device)
 
-def main():
-    for ds in ['voc', 'waterbirds', 'imagenet']:
+
+def demo():
+    for ds in ['voc', 'waterbirds', 'camelyon', 'imagenet']:
         dataloaders = datasets.datasets.get_dataloaders(ds)
         print(ds)
         utils.get_info(dataloaders)
 
     training.eval(device, dataloaders['val'], False) # only imagenet atm
+
+def inspect_dataloader(dataloaders):
+    images, labels = next(iter(dataloaders['train']))
+    print("Images shape:", images.shape)
+    print("Labels shape:", labels.shape)
+    print(labels)
+
+def main(): 
+    demo()
+    #dataloaders = datasets.datasets.get_dataloaders('camelyon')
+    #print(dataloaders)
+    #inspect_dataloader(dataloaders)
 
 if __name__ == "__main__":
     main()

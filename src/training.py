@@ -26,7 +26,7 @@ def eval(device, dataloader, plot=True):
                 print(labels[0], dataloader.dataset.id2class[int(labels[0])])
             all_predictions.append(best_class_indices)
             all_labels.append(labels)
-        if i>1000:# if you want to test only a few
+        if i>5:# if you want to test only a few
             break
     all_predictions, all_labels = torch.cat(all_predictions).cpu(), torch.cat(all_labels).cpu()
     acc = utils.accuracy(all_predictions, all_labels)

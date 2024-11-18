@@ -7,7 +7,7 @@ import scipy
 from torchvision import transforms
 
 import utils, datasets #ours
-
+import h5py
 from torch.utils.data import random_split
 ################## ImageNet #####################
 
@@ -134,7 +134,50 @@ def get_loaders_voc(transform, batch_size = 64):
                                     shuffle=shuffle)
     return dataloaders
 
+############## CAMYLON ##############
 
+class PatchCamelyon(Dataset):
+    def __init__(self, root, split='train', transform=None):
+        self.root = root
+        self.transform = transform
+        self.split = split
+        with h5py.File(self.root+self.split2path('x'), "r") as h5:
+            self.num_samples = h5["x"].shape[0] # len
+        
+    def __len__(self):
+        return self.num_samples
+    
+    def split2path(self, z):
+        """choose z to x or y depending on image or label"""
+        return f'camelyonpatch_level_2_split_{self.split}_{z}.h5'
+
+    def __getitem__(self, idx):
+        with h5py.File(self.root+self.split2path('x'), "r") as h5:
+            image = h5["x"][idx] 
+        with h5py.File(self.root+self.split2path('y'), "r") as h5:
+            label = h5["y"][idx].squeeze() 
+
+        if self.transform:
+            image = self.transform(image)
+        else:
+             image = torch.tensor(image, dtype=torch.float)
+        label = torch.tensor(label, dtype=torch.long)
+        return image, label
+    
+
+
+def get_loaders_patchcamelyon(transform, splits=['train', 'valid', 'test'], batch_size=64):
+    """Image and binary target"""
+    dataloaders = {}
+    for att in splits: 
+        dataset = PatchCamelyon('./data/pcamv1/', att)
+        
+        shuffle = True if att == 'train' else False
+        if att == 'valid':
+            att ='val'
+        dataloaders[att] =  DataLoader(dataset,batch_size=batch_size,
+                                      shuffle=shuffle)
+    return dataloaders
 
 
 
@@ -154,6 +197,8 @@ def get_dataloaders(ds):
         return get_loaders_waterbirds(transform, batch_size=64)
     elif ds == 'voc':
         return get_loaders_voc(transform, batch_size=64)
+    elif ds == 'camelyon':
+        return get_loaders_patchcamelyon(transform, batch_size=64)
     else:
         print('Not valid dataset!')
 
