@@ -1,4 +1,4 @@
-################## Model
+import torch.nn.functional as F
 
 def kd_loss(student_logits, teacher_logits, temperature):
     """Compute the knowledge distillation (KD) loss using KL divergence."""
@@ -85,4 +85,3 @@ class GradCAM:
         cam = cam - cam.min()
         cam = cam / cam.max()
         return cam.squeeze(0).squeeze(0)  # Return single-channel heatmap
-#----------------------------------------------------------------------------------

@@ -1,7 +1,5 @@
 import matplotlib.pyplot as plt
 import requests
-import torch
-import torch.nn.functional as F
 
 def key2key(dict1, dict2):
     """If targets are the same, maps key to key"""
