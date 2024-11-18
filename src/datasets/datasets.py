@@ -170,7 +170,7 @@ def get_loaders_patchcamelyon(transform, splits=['train', 'valid', 'test'], batc
     """Image and binary target"""
     dataloaders = {}
     for att in splits: 
-        dataset = PatchCamelyon('./data/pcamv1/', att)
+        dataset = PatchCamelyon('./data/pcamv1/', att, transform)
         
         shuffle = True if att == 'train' else False
         if att == 'valid':
