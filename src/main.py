@@ -11,7 +11,7 @@ import importlib
 
 import datasets.datasets
 import datasets.datasets_gte
-import model_functions, utils, training, datasets
+import model_functions, utils, training, datasets, models
 
 device = 'cpu'
 if torch.cuda.is_available():
@@ -36,10 +36,13 @@ def inspect_dataloader(dataloaders):
     print(labels)
 
 def main(): 
+    model = models.pcam_teacher()
+    print(model)
     demo()
     #dataloaders = datasets.datasets.get_dataloaders('camelyon')
     #print(dataloaders)
     #inspect_dataloader(dataloaders)
+    
 
 if __name__ == "__main__":
     main()
