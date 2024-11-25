@@ -35,13 +35,22 @@ def inspect_dataloader(dataloaders):
     print("Labels shape:", labels.shape)
     print(labels)
 
+
+def show_dataloader_demo():
+    dataloaders = datasets.datasets.get_dataloaders('waterbirds')
+    data_iter = iter(dataloaders['test_id'])
+    images, labels = next(data_iter)
+    image = utils.show_image(images[0], './figs/dataset_image.png')
+    print(image)
+
 def main(): 
-    model = models.pcam_teacher()
-    print(model)
-    demo()
+    #model = models.pcam_teacher()
+    #print(model)
+    #demo()
     #dataloaders = datasets.datasets.get_dataloaders('camelyon')
     #print(dataloaders)
     #inspect_dataloader(dataloaders)
+    show_dataloader_demo()
     
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import requests
+import numpy as np
 
 def key2key(dict1, dict2):
     """If targets are the same, maps key to key"""
@@ -110,3 +111,23 @@ def get_scrape():
     output_file = root+"extracted_data.csv"
     extracted_df.to_csv(output_file, index=False)
     print(f"Extracted data saved to {output_file}")
+
+
+def denormalize_image(image, mean, std):
+    """Apply on normalized images shape ex 0.876"""
+    mean = np.array(mean)
+    std = np.array(std)
+    image = image * std + mean  
+    return np.clip(image, 0, 1) # should be between 0,1
+
+def show_image(image, path, plot = True):
+    """Show image directly from dataloader"""
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225] # from imagenet standard
+    image = image.permute(1, 2, 0).numpy()
+    image = denormalize_image(image, mean, std)
+    image = (image * 255).astype(np.uint8)
+    if plot:
+        plt.imshow(image)
+        plt.savefig(path)
+    return image
