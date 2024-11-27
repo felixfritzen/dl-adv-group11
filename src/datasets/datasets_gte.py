@@ -153,14 +153,21 @@ class WaterBirdsDataset(torch.utils.data.Dataset):
             self.filename_array[idx])
         sample = Image.open(img_filename).convert('RGB')
 
+        # Fetch bounding box coordinates from cub_dict using img_filename
+        bbox_info = self.cub_dict[self.filename_array[idx]]
+        bb_coordinates = bbox_info.box  # This gives you [xmin, ymin, xmax, ymax]
+        bb_coordinates = [int(coord) for coord in bb_coordinates]
+        bb_coordinates = torch.tensor(bb_coordinates, dtype=torch.int64)
+        
         # should be replaced by below:
         if self.transform is not None:
             sample = self.transform(sample)
      
         if self.target_transform is not None:
             y = self.target_transform(y)
+        
 
-        ret = sample, y
+        ret = sample, y, bb_coordinates
 
         if self.also_return_groups:
             ret = sample, y, g
@@ -231,4 +238,3 @@ class VOCDataset(torchvision.datasets.VOCDetection):
             return img, target, bbs
         else:
             return img, target
-
