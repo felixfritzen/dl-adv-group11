@@ -24,6 +24,9 @@ def pcam_student():
     )
     return model
 
+def waterbirds_student():
+    return pcam_student() # also resnet 18, binary
+
 def main(): 
     model = pcam_teacher()
     print(model)
