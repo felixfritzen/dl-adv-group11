@@ -232,49 +232,63 @@ def get_loaders_patchcamelyon(transforms, splits=['train', 'valid', 'test'], bat
 ############### General #############
 def get_transforms(ds):
     """Transformations used in dataloaders, no random in eval dataloaders"""
-    transforms={}
+    transforms_dict={}
     mean = (0.485, 0.456, 0.406)
     std = (0.229, 0.224, 0.225)# from paper
     if ds == 'imagenet':
-        transforms['train'] = transforms.Compose([
+        transforms_dict['train'] = transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std)
         ])
 
-        transforms['eval'] = transforms.Compose([
+        transforms_dict['eval'] = transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std)
         ])
     elif ds == 'waterbirds':
-        transforms['train'] = transforms.Compose([
+        transforms_dict['train'] = transforms.Compose([
             transforms.ToTensor(),
             transforms.RandomHorizontalFlip(),#from paper
             transforms.RandomResizedCrop(224,scale=(0.7, 1.0),ratio=(0.75, 1.3333333333333333)),
             transforms.Normalize(mean=mean, std=std),
         ])
-        transforms['eval'] = transforms.Compose([
+        transforms_dict['eval'] = transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize(256),
             transforms.CenterCrop(224), #DEFAULT_CROP_SIZE = 224
             transforms.Normalize(mean=mean, std=std),
         ])
     elif ds == 'voc':
-        transforms['train'] = transforms.Compose([
+        transforms_dict['train'] = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(), 
             transforms.Normalize(mean=mean, std=std)
         ])
-        transforms['eval']=transforms['train']  
+        transforms_dict['eval']=transforms_dict['train']  
     elif ds == 'camelyon':
-        transforms['train'] = transforms.Compose([transforms.ToTensor()])
-        transforms['eval']=transforms['train'] 
+        transforms_dict = { # incoming tensor
+        'train': transforms.Compose([
+            transforms.ToPILImage(),
+            #transforms.Resize(224), 
+            transforms.RandomHorizontalFlip(),  
+            transforms.RandomRotation(10), 
+            transforms.ToTensor(),
+            #transforms.Normalize(mean,std)
+        ]),
+        'eval': transforms.Compose([
+            transforms.ToPILImage(),
+            #transforms.Resize(224), 
+            transforms.ToTensor(),
+            #transforms.Normalize(mean, std) #88.769% if no rezize nor normalize
+        ])}
+
     else:
         print('Not valid dataset')
-    return transforms
+    return transforms_dict
 
 def get_dataloaders(ds):
     transforms = get_transforms(ds)

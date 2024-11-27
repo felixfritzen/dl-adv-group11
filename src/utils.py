@@ -131,3 +131,70 @@ def show_image(image, path, plot = True):
         plt.imshow(image)
         plt.savefig(path)
     return image
+
+def plot_waterbirds_result(our_accuracy, our_agreement, path):
+    """Values should have form  agreement_data = {
+        "KD": [68.7, 75.2, 72.8, 77.9],
+        "e$^2$KD": [70.3, 76.4, 74.5, 79.3]
+    }"""
+    categories = ["700 epochs OOD", "700 epochs ID", "+5x training OOD", "+5x training ID"]
+    methods = ["KD", "e$^2$KD"]
+    # the paper
+    reproduce_accuracy = {
+        "KD": [31.1, 95.5, 37.9, 97.3],
+        "e$^2$KD": [36.8, 97.4, 47.7, 98.8]
+    }
+    reproduce_agreement = {
+        "KD": [61.8, 95.5, 69.2, 97.5],
+        "e$^2$KD": [69.1, 97.6, 80.2, 98.8]
+    }
+
+    x = np.arange(len(categories))
+    width = 0.35 
+    fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True, gridspec_kw={'hspace': 0.3})
+
+    def annotate_bars(ax, x_positions, our_values, paper_values):
+        for i, (our, paper) in enumerate(zip(our_values, paper_values)):
+            diff = our - paper
+            highest_value = max(our, paper)
+            ax.text(
+                x_positions[i], highest_value + 0.5, 
+                f"{our:.1f} ({'+' if diff > 0 else ''}{diff:.1f})",
+                ha="center", fontsize=9, color="black"
+            )
+
+    axes[0].bar(x - width/2, our_accuracy["KD"], width, label="KD (Our)", color="lightgray", edgecolor="black")
+    axes[0].bar(x + width/2, our_accuracy["e$^2$KD"], width, label="e$^2$KD (Our)", color="skyblue", edgecolor="black")
+
+    axes[0].bar(x - width/2, reproduce_accuracy["KD"], width, label="KD (Paper)", color="none", edgecolor="black", hatch="...", alpha=0.5)
+    axes[0].bar(x + width/2, reproduce_accuracy["e$^2$KD"], width, label="e$^2$KD (Paper)", color="none", edgecolor="black", hatch="...", alpha=0.5)
+
+    axes[0].set_ylabel("Accuracy")
+    axes[0].set_title("Accuracy")
+    axes[0].legend(loc="lower right")
+
+    annotate_bars(axes[0], x - width/2, our_accuracy["KD"], reproduce_accuracy["KD"])
+    annotate_bars(axes[0], x + width/2, our_accuracy["e$^2$KD"], reproduce_accuracy["e$^2$KD"])
+
+    axes[1].bar(x - width/2, our_agreement["KD"], width, label="KD (Our)", color="lightgray", edgecolor="black")
+    axes[1].bar(x + width/2, our_agreement["e$^2$KD"], width, label="e$^2$KD (Our)", color="skyblue", edgecolor="black")
+
+    axes[1].bar(x - width/2, reproduce_agreement["KD"], width, label="KD (Paper)", color="none", edgecolor="black", hatch="...", alpha=0.5)
+    axes[1].bar(x + width/2, reproduce_agreement["e$^2$KD"], width, label="e$^2$KD (Paper)", color="none", edgecolor="black", hatch="...", alpha=0.5)
+
+    axes[1].set_ylabel("Agreement")
+    axes[1].set_title("Agreement")
+    axes[1].set_xticks(x)
+    axes[1].set_xticklabels(categories)
+
+    annotate_bars(axes[1], x - width/2, our_agreement["KD"], reproduce_agreement["KD"])
+    annotate_bars(axes[1], x + width/2, our_agreement["e$^2$KD"], reproduce_agreement["e$^2$KD"])
+
+    for ax in axes:
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.set_ylim([0, 110])
+        ax.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.savefig('test.png')
+    plt.savefig(path)
+    plt.show()

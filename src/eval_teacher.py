@@ -1,5 +1,6 @@
 import torch
 from torchvision import models
+import our_models
 from tqdm import tqdm
 import datasets.datasets as datasets
 import utils
@@ -31,8 +32,12 @@ def evaluate_teacher(model, dataloader):
 
 
 def eval_imagenet(device, model, dataloader, plot=True):
-    model = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1).to(device)
+    """
+    Evaluate the model on imagenet dataset.
+    """
+    #model = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1).to(device)
     model.eval()  # Set the model to evaluation mode
+    model.to(device)
     all_predictions, all_labels = [], []
     for i, (images, labels, _) in enumerate(tqdm(dataloader)):
         #print(images.shape, labels.shape)
@@ -48,15 +53,17 @@ def eval_imagenet(device, model, dataloader, plot=True):
                 print(labels[0], dataloader.dataset.id2class[int(labels[0])])
             all_predictions.append(best_class_indices)
             all_labels.append(labels)
-        if i>10:# if you want to test only a few
-            break
+
     all_predictions, all_labels = torch.cat(all_predictions).cpu(), torch.cat(all_labels).cpu()
     acc = utils.accuracy(all_predictions, all_labels)
     print('Accuracy', acc) # 54.947
 
 def eval_cam(model):
-    #test_acc_loaders()
+    """
+    Evaluate the model on pcam dataset.
+    """
     model.eval()
+    model.to(device)
     all_predictions, all_labels = [], []
 
     dataloaders =datasets.get_dataloaders('camelyon')
@@ -79,6 +86,9 @@ def eval_cam(model):
     print(all_labels.sum(), all_labels.shape)
 
 def test_waterbirds():
+    """
+    Baseline on waterbirds.
+    """
     dataloaders = datasets.get_dataloaders("waterbirds")  
 
     teacher = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1).to(device)
@@ -87,14 +97,21 @@ def test_waterbirds():
 
 
 def test_acc_loaders():
-    model = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1).to(device)
+    """
+    Baseline on imagenet for all loader, debugging purposes
+    """
+    model = models.resnet18(pretrained=False).to(device)
     dataloaders =datasets.get_dataloaders('imagenet')
     for att in ['train', 'test', 'val']:
         eval_imagenet(device, model, dataloaders[att], plot=False)
 
 def main():
+    #test_waterbirds() #broken
+    eval_cam(our_models.pcam_teacher())
+    #eval_cam(models.pcam_student())
+    #test_acc_loaders()
     #test_waterbirds()
-    test_acc_loaders()
+
 
 
 if __name__ == "__main__":
