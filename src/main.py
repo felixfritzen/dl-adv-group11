@@ -27,7 +27,7 @@ def demo():
         print(ds)
         utils.get_info(dataloaders)
 
-    training.eval(device, dataloaders['val'], False) # only imagenet atm
+    training.eval(device, dataloaders, False) # only imagenet atm
 
 def inspect_dataloader(dataloaders):
     images, labels = next(iter(dataloaders['train']))
@@ -65,7 +65,8 @@ def main():
     #print(dataloaders)
     #inspect_dataloader(dataloaders)
     #show_dataloader_demo()
-    demo_waterbirds_acc()
+    #demo_waterbirds_acc()\
+    demo()
     
 
 if __name__ == "__main__":

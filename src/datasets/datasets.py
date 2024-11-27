@@ -125,12 +125,15 @@ def get_loaders_waterbirds(transforms, splits=['train', 'val', 'test'], batch_si
             confounder_names=None,
             reverse_problem=False
         )
-
+        dataloaders[att]= DataLoader(dataset, batch_size=batch_size, shuffle=True)
         if att in ['val', 'test']:
             # Filter directly on self.indices to ensure valid subset indices
-            id_indices = np.where(dataset.group_array[dataset.indices] == 3)[0]  # Waterbird on water
-            ood_indices = np.where(dataset.group_array[dataset.indices] == 2)[0]  # Waterbird on land
-
+            id_indices = np.where(
+            (dataset.group_array[dataset.indices] == 3) | (dataset.group_array[dataset.indices] == 0)
+            )[0] # Waterbird on water, landbird on land
+            ood_indices = np.where(
+            (dataset.group_array[dataset.indices] == 2) | (dataset.group_array[dataset.indices] == 1)
+            )[0] # Waterbird on land,  landbird on water
             id_dataset = torch.utils.data.Subset(dataset, id_indices)
             ood_dataset = torch.utils.data.Subset(dataset, ood_indices)
 

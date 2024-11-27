@@ -229,6 +229,9 @@ def main(args):
     elif args.dataset == 'imagenet':
         has_id_ood = False
         num_classes = 1000
+    elif args.dataset == 'camelyon':
+        has_id_ood = False
+        num_classes = 2
     else:
         raise ValueError(f"Unsupported dataset: {args.dataset}")
     
@@ -369,12 +372,12 @@ def main(args):
 
     # Test evaluation
     if has_id_ood:
-        test_id_top1_acc, test_id_top5_acc = evaluate(student, dataloaders['test_id'])
-        test_ood_top1_acc, test_ood_top5_acc = evaluate(student, dataloaders['test_ood'])
+        test_id_top1_acc, test_id_top5_acc = evaluate(student, dataloaders['test_id'], num_classes)
+        test_ood_top1_acc, test_ood_top5_acc = evaluate(student, dataloaders['test_ood'], num_classes)
         print(f"Test In-Distribution Top-1 Accuracy: {test_id_top1_acc:.4f}, Top-5 Accuracy: {test_id_top5_acc:.4f}")
         print(f"Test Out-of-Distribution Top-1 Accuracy: {test_ood_top1_acc:.4f}, Top-5 Accuracy: {test_ood_top5_acc:.4f}")
     else:
-        test_top1_acc, test_top5_acc = evaluate(student, dataloaders['test'])
+        test_top1_acc, test_top5_acc = evaluate(student, dataloaders['test'], num_classes)
         print(f"Test Top-1 Accuracy: {test_top1_acc:.4f}, Top-5 Accuracy: {test_top5_acc:.4f}")
 
     # Save the final model
@@ -384,7 +387,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training script for baseline, KD, and e2KD experiments.")
-    parser.add_argument("--dataset", required=True, choices=["imagenet", "waterbirds"], help="Dataset to use.")
+    parser.add_argument("--dataset", required=True, choices=["imagenet", "waterbirds", "camelyon"], help="Dataset to use.")
     parser.add_argument("--experiment", required=True, choices=["baseline", "kd", "e2KD"], help="Type of experiment to run.")
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--lr", type=float, default=0.01, help="Initial learning rate.")
