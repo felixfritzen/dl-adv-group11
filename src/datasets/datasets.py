@@ -7,8 +7,10 @@ import scipy
 from torchvision import transforms
 
 import utils, datasets #ours
+from . import datasets_gte
 import h5py
 from torch.utils.data import random_split
+import numpy as np
 ################## ImageNet #####################
 
 class ImagenetDataset(Dataset):
@@ -60,52 +62,94 @@ def getkey2key():
         json.dump(mapping, f)
     return mapping, id2name2017
 
-def get_loaders_imagenet(transform, batch_size = 32):
-    """Image and int target"""
-    labels_path = './data/imagenet/ILSVRC2012_devkit_t12/data/ILSVRC2012_validation_ground_truth.txt'
-    images_path = './data/imagenet/images/'
+def get_loaders_imagenet(transforms, batch_size=32):
+    """
+    ImageNet dataloaders with specified data augmentation.
+    """
+    labels_path = '/home/shared_project/dl-adv-group11/data/imagenet/ILSVRC2012_devkit_t12/data/ILSVRC2012_validation_ground_truth.txt'
+    images_path = '/home/shared_project/dl-adv-group11/data/imagenet/images/'
     mapping, id2name2017 = getkey2key()
     dataloaders = {}
     ds = {}
-    imagenet_dataset = ImagenetDataset(transform, labels_path, images_path, mapping, id2name2017)
     
-    train_size = int(0.8 * len(imagenet_dataset))
-    val_size = int(0.1 * len(imagenet_dataset))
-    test_size = len(imagenet_dataset) - train_size - val_size
+    # Load the full dataset indices
+    total_size = len(ImagenetDataset(None, labels_path, images_path, mapping, id2name2017))
+    indices = list(range(total_size))
+    np.random.shuffle(indices)  # Make sure to shuffle indices for randomness
+
+    train_size = int(0.8 * total_size)
+    val_size = int(0.1 * total_size)
+    test_size = total_size - train_size - val_size
+
+    # Split indices for reproducibility
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:train_size + val_size]
+    test_indices = indices[train_size + val_size:]
+
+    # Create separate datasets for each split with their own transforms
+    train_dataset = ImagenetDataset(transforms['train'], labels_path, images_path, mapping, id2name2017)
+    val_dataset = ImagenetDataset(transforms['eval'], labels_path, images_path, mapping, id2name2017)
+    test_dataset = ImagenetDataset(transforms['eval'], labels_path, images_path, mapping, id2name2017)
+
+    # Create Subsets
+    ds['train'] = torch.utils.data.Subset(train_dataset, train_indices)
+    ds['val'] = torch.utils.data.Subset(val_dataset, val_indices)
+    ds['test'] = torch.utils.data.Subset(test_dataset, test_indices)
     
-    ds['train'], ds['val'], ds['test'] = random_split(imagenet_dataset, [train_size, val_size, test_size])
     for key in ds.keys():
         shuffle = True if key == 'train' else False
-        dataloaders[key]=DataLoader(ds[key],batch_size=batch_size, shuffle=shuffle)
+        dataloaders[key] = DataLoader(ds[key], batch_size=batch_size, shuffle=shuffle)
     return dataloaders
 
 
 ################## Waterbirds #####################
 
 
-def get_loaders_waterbirds(transform, splits=['train', 'val', 'test'], batch_size=64):
-    """Image and binary target"""
+def get_loaders_waterbirds(transforms, splits=['train', 'val', 'test'], batch_size=64):
+    """
+    Loaders for Waterbirds with support for ID and OOD splits.
+    """
     dataloaders = {}
-    for att in splits: 
-        dataset = datasets.datasets_gte.WaterBirdsDataset(root= './data',image_set=att, 
-                           transform=transform, target_transform=None,
-                           target_name='waterbird_complete95',
-                           confounder_names=None,
-                           reverse_problem=False)
-        
-        shuffle = True if att == 'train' else False
+    for att in splits:
+        if att == 'train':
+            transform = transforms['train']
+        else:
+            transform = transforms['eval']
 
-        dataset.also_return_groups = True if  att == 'test' else False # for out/in dist
+        dataset = datasets.datasets_gte.WaterBirdsDataset(
+            root='/home/shared_project/dl-adv-group11/data',
+            image_set=att,
+            transform=transform,
+            target_transform=None,
+            target_name='waterbird_complete95',
+            confounder_names=None,
+            reverse_problem=False
+        )
 
-        dataloaders[att] =  DataLoader(dataset,batch_size=batch_size,
-                                      shuffle=shuffle)
+        if att in ['val', 'test']:
+            # Filter directly on self.indices to ensure valid subset indices
+            id_indices = np.where(dataset.group_array[dataset.indices] == 3)[0]  # Waterbird on water
+            ood_indices = np.where(dataset.group_array[dataset.indices] == 2)[0]  # Waterbird on land
+
+            id_dataset = torch.utils.data.Subset(dataset, id_indices)
+            ood_dataset = torch.utils.data.Subset(dataset, ood_indices)
+
+            print(f"ID Dataset '{att}': {len(id_dataset)} samples")
+            print(f"OOD Dataset '{att}': {len(ood_dataset)} samples")
+
+            dataloaders[f'{att}_id'] = DataLoader(id_dataset, batch_size=batch_size, shuffle=False)
+            dataloaders[f'{att}_ood'] = DataLoader(ood_dataset, batch_size=batch_size, shuffle=False)
+        else:
+            dataloaders[att] = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
     return dataloaders
+
 
 
 
 ################## VOC #####################
 
-def get_loaders_voc(transform, batch_size = 64):
+def get_loaders_voc(transforms, batch_size = 64):
     """Image and one/multi hot of 20 classes target"""
     ds = {}
     dataloaders = {}
@@ -115,7 +159,7 @@ def get_loaders_voc(transform, batch_size = 64):
         year="2012",
         image_set="train",
         download=False,
-        transform=transform)
+        transform=transforms['train'])
     # now we split this into train/val 90/10"
     train_size = int(0.9 * len(dataset))
     val_size = len(dataset) - train_size
@@ -126,7 +170,7 @@ def get_loaders_voc(transform, batch_size = 64):
         year="2012",
         image_set="val", # uses the validation dataset
         download=False,
-        transform=transform)
+        transform=transforms['eval'])
     
     for key in ds.keys():
         shuffle = True if key == 'train' else False
@@ -166,10 +210,14 @@ class PatchCamelyon(Dataset):
     
 
 
-def get_loaders_patchcamelyon(transform, splits=['train', 'valid', 'test'], batch_size=64):
+def get_loaders_patchcamelyon(transforms, splits=['train', 'valid', 'test'], batch_size=64):
     """Image and binary target"""
     dataloaders = {}
     for att in splits: 
+        if att == 'train':
+            transform = transforms['train']
+        else:
+            transform = transforms['eval']
         dataset = PatchCamelyon('./data/pcamv1/', att, transform)
         
         shuffle = True if att == 'train' else False
@@ -182,23 +230,63 @@ def get_loaders_patchcamelyon(transform, splits=['train', 'valid', 'test'], batc
 
 
 ############### General #############
-
-
-def get_dataloaders(ds):
+def get_transforms(ds):
+    """Transformations used in dataloaders, no random in eval dataloaders"""
+    transforms={}
     mean = (0.485, 0.456, 0.406)
     std = (0.229, 0.224, 0.225)# from paper
-    transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
+    if ds == 'imagenet':
+        transforms['train'] = transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)
+        ])
+
+        transforms['eval'] = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)
+        ])
+    elif ds == 'waterbirds':
+        transforms['train'] = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.RandomHorizontalFlip(),#from paper
+            transforms.RandomResizedCrop(224,scale=(0.7, 1.0),ratio=(0.75, 1.3333333333333333)),
+            transforms.Normalize(mean=mean, std=std),
+        ])
+        transforms['eval'] = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(256),
+            transforms.CenterCrop(224), #DEFAULT_CROP_SIZE = 224
+            transforms.Normalize(mean=mean, std=std),
+        ])
+    elif ds == 'voc':
+        transforms['train'] = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(), 
+            transforms.Normalize(mean=mean, std=std)
+        ])
+        transforms['eval']=transforms['train']  
+    elif ds == 'camelyon':
+        transforms['train'] = transforms.Compose([transforms.ToTensor()])
+        transforms['eval']=transforms['train'] 
+    else:
+        print('Not valid dataset')
+    return transforms
+
+def get_dataloaders(ds):
+    transforms = get_transforms(ds)
 
     if ds == 'imagenet':
-        return get_loaders_imagenet(transform, batch_size = 64)
+        return get_loaders_imagenet(transforms, batch_size=32)
     elif ds == 'waterbirds':
-        return get_loaders_waterbirds(transform, batch_size=64)
+        return get_loaders_waterbirds(transforms, batch_size=64)
     elif ds == 'voc':
-        return get_loaders_voc(transform, batch_size=64)
+        return get_loaders_voc(transforms, batch_size=64)
     elif ds == 'camelyon':
-        return get_loaders_patchcamelyon(transform, batch_size=64)
+        return get_loaders_patchcamelyon(transforms, batch_size=256)
     else:
         print('Not valid dataset!')
 
