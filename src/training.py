@@ -13,7 +13,7 @@ import model_functions
 import matplotlib.pyplot as plt
 
 # Device setup
-device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+device = 'cuda:0' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 print(f"Using device: {device}")
 
 def calculate_agreement(student, teacher, dataloader):
@@ -56,16 +56,32 @@ def plot_metrics_live(metrics, epochs_completed, save_path="metrics.png"):
     
     # Plot Top-1 and Top-5 Accuracies
     plt.subplot(1, 3, 1)
-    plt.plot(range(1, epochs_completed + 1), metrics["train_top1_acc"], label="Train Top-1 Acc")
-    plt.plot(range(1, epochs_completed + 1), metrics["val_top1_acc"], label="Val Top-1 Acc")
+    plt.plot(
+        [i + 1 for i, v in enumerate(metrics["train_top1_acc"]) if v is not None],
+        [v for v in metrics["train_top1_acc"] if v is not None],
+        label="Train Top-1 Acc"
+    )
+    plt.plot(
+        [i + 1 for i, v in enumerate(metrics["val_top1_acc"]) if v is not None],
+        [v for v in metrics["val_top1_acc"] if v is not None],
+        label="Val Top-1 Acc"
+    )
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy")
     plt.legend()
     plt.title("Top-1 Accuracy")
     
     plt.subplot(1, 3, 2)
-    plt.plot(range(1, epochs_completed + 1), metrics["train_top5_acc"], label="Train Top-5 Acc")
-    plt.plot(range(1, epochs_completed + 1), metrics["val_top5_acc"], label="Val Top-5 Acc")
+    plt.plot(
+        [i + 1 for i, v in enumerate(metrics["train_top5_acc"]) if v is not None],
+        [v for v in metrics["train_top5_acc"] if v is not None],
+        label="Train Top-5 Acc"
+    )
+    plt.plot(
+        [i + 1 for i, v in enumerate(metrics["val_top5_acc"]) if v is not None],
+        [v for v in metrics["val_top5_acc"] if v is not None],
+        label="Val Top-5 Acc"
+    )
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy")
     plt.legend()
@@ -74,7 +90,11 @@ def plot_metrics_live(metrics, epochs_completed, save_path="metrics.png"):
     # Plot Agreement with Teacher if available
     plt.subplot(1, 3, 3)
     if metrics["agreement"]:
-        plt.plot(range(1, epochs_completed + 1), metrics["agreement"], label="Agreement")
+        plt.plot(
+            [i + 1 for i, v in enumerate(metrics["agreement"]) if v is not None],
+            [v for v in metrics["agreement"] if v is not None],
+            label="Agreement"
+        )
         plt.xlabel("Epoch")
         plt.ylabel("Agreement")
         plt.legend()
@@ -91,7 +111,7 @@ def plot_gradcam_heatmaps(student, teacher, dataloader, gradcam_student, gradcam
     student.eval()
     teacher.eval()
 
-    samples, labels = next(iter(dataloader))
+    samples, labels, _ = next(iter(dataloader))
     images = samples.to(device)
     labels = labels.to(device)
 
@@ -152,18 +172,23 @@ def train_epoch(student, teacher, dataloader, optimizer, scheduler, num_classes,
             elif experiment == "kd":
                 with torch.no_grad():
                     teacher_logits = teacher(images)
-                loss = model_functions.kd_loss(student_logits, teacher_logits, temperature)
+                kd_loss = model_functions.kd_loss(student_logits, teacher_logits, temperature)
+                gt_loss = nn.CrossEntropyLoss()(student_logits, labels)
+                loss = 2*kd_loss + 1*gt_loss
             elif experiment == "e2KD":
                 with torch.no_grad():
                     teacher_logits = teacher(images)
-                    teacher_explanations = gradcam_teacher.generate_heatmap(images)
-                student_explanations = gradcam_student.generate_heatmap(images)
-                loss = model_functions.e2KD_loss(student_logits, teacher_logits, student_explanations, teacher_explanations, temperature, lambda_weight)
+                teacher_explanations = gradcam_teacher.generate_heatmap(images, device).detach()
+                student_explanations = gradcam_student.generate_heatmap(images, device).detach()
+                e2kd_loss = model_functions.e2KD_loss(student_logits, teacher_logits, student_explanations, teacher_explanations, temperature, lambda_weight)
+                gt_loss = nn.CrossEntropyLoss()(student_logits, labels)
+                loss = 2*e2kd_loss + 1*gt_loss
+                scaler.scale(loss).backward()  # Retain the graph for GradCAM gradients
             else:
                 raise ValueError(f"Unknown experiment type: {experiment}")
 
         # Scale loss and backward pass
-        scaler.scale(loss).backward()
+        #scaler.scale(loss).backward()
 
         # Gradient clipping
         scaler.unscale_(optimizer)
@@ -240,14 +265,34 @@ def main(args):
     student = models.resnet18(pretrained=False).to(device)
     student.fc = nn.Linear(student.fc.in_features, num_classes).to(device)
     
-    # Load a saved model if provided
     if args.resume:
         print(f"Resuming training from: {args.resume}")
         checkpoint = torch.load(args.resume)
         student.load_state_dict(checkpoint)
-        start_epoch = 0
+        start_epoch = 20
+        print(f"Starting from epoch: {start_epoch}")
+        try:
+            metrics = torch.load(f"metrics_checkpoint_{args.dataset}_{args.experiment}.pth")
+            print("Loaded metrics from checkpoint.")
+        except FileNotFoundError:
+            print("Metrics checkpoint not found. Initializing empty metrics.")
+            metrics = {
+                "train_top1_acc": [None] * start_epoch,  # Placeholder for missed epochs
+                "train_top5_acc": [None] * start_epoch,
+                "val_top1_acc": [None] * start_epoch,
+                "val_top5_acc": [None] * start_epoch,
+                "agreement": [None] * start_epoch
+            }
     else:
         start_epoch = 0
+        metrics = {
+            "train_top1_acc": [],
+            "train_top5_acc": [],
+            "val_top1_acc": [],
+            "val_top5_acc": [],
+            "agreement": []
+        }
+
 
     teacher = None
     gradcam_teacher = gradcam_student = None
@@ -271,13 +316,11 @@ def main(args):
     milestones=[5]
     )
 
-    # Metrics tracking
-    metrics = {
-        "train_top1_acc": [], "train_top5_acc": [],
-        "val_top1_acc": [], "val_top5_acc": [],
-        "agreement": []
-    }
-    
+    # Adjust the scheduler state to resume correctly
+    if start_epoch > 0:
+        for _ in range(start_epoch):
+            scheduler.step()
+        
     # Early Stopping Variables
     best_val_top1_acc = 0.0  # Initialize the best validation top-1 accuracy
     patience = 10            # Number of epochs to wait after last improvement
@@ -339,7 +382,7 @@ def main(args):
             metrics["val_top1_acc"].append(val_top1_acc)
             metrics["val_top5_acc"].append(val_top5_acc)
 
-        plot_metrics_live(metrics, epoch + 1, save_path="training_metrics.png")
+        plot_metrics_live(metrics, epoch + 1, save_path=f"training_metrics_{args.dataset}_{args.experiment}.png")
         
         # Early Stopping Check
         if val_top1_acc > best_val_top1_acc:
@@ -351,16 +394,16 @@ def main(args):
             torch.save(student.state_dict(), best_model_path)
             print(f"New best model saved: {best_model_path}")
         else:
-            epochs_no_improve += 1
+            #epochs_no_improve += 1
             print(f"No improvement in validation accuracy for {epochs_no_improve} epoch(s).")
 
         if epochs_no_improve >= patience:
             print(f"Validation accuracy did not improve for {patience} epochs. Early stopping.")
-            early_stop = True
+            #early_stop = True
 
         # Save Grad-CAM heatmaps every 15 epochs
         if args.experiment == "e2KD" and epoch % 15 == 0:
-            plot_gradcam_heatmaps(student, teacher, dataloaders['val'], gradcam_student, gradcam_teacher, epoch + 1)
+            pass#plot_gradcam_heatmaps(student, teacher, dataloaders['val'], gradcam_student, gradcam_teacher, epoch + 1)
 
         # Save the model every 10 epochs
         if (epoch + 1) % 10 == 0:
