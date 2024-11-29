@@ -11,6 +11,8 @@ from . import datasets_gte
 import h5py
 from torch.utils.data import random_split
 import numpy as np
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 ################## ImageNet #####################
 
 class ImagenetDataset(Dataset):
@@ -253,18 +255,39 @@ def get_transforms(ds):
             transforms.Normalize(mean=mean, std=std)
         ])
     elif ds == 'waterbirds':
-        transforms_dict['train'] = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.RandomHorizontalFlip(),#from paper
-            transforms.RandomResizedCrop(224,scale=(0.7, 1.0),ratio=(0.75, 1.3333333333333333)),
-            transforms.Normalize(mean=mean, std=std),
-        ])
-        transforms_dict['eval'] = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize(256),
-            transforms.CenterCrop(224), #DEFAULT_CROP_SIZE = 224
-            transforms.Normalize(mean=mean, std=std),
-        ])
+        bb= False
+        if not bb:
+            transforms_dict['train'] = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.RandomHorizontalFlip(),#from paper
+                transforms.RandomResizedCrop(224,scale=(0.7, 1.0),ratio=(0.75, 1.3333333333333333)),
+                transforms.Normalize(mean=mean, std=std),
+            ])
+            transforms_dict['eval'] = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Resize(256),
+                transforms.CenterCrop(224), #DEFAULT_CROP_SIZE = 224
+                transforms.Normalize(mean=mean, std=std),
+            ])
+        else:
+            transforms_dict['train'] = A.Compose([
+            A.SmallestMaxSize(max_size=224),
+            #A.RandomResizedCrop(height=224, width=224, scale=(0.7, 1.0), ratio=(0.75, 1.3333333333333333)),
+            A.HorizontalFlip(p=0.5),
+            A.Normalize(mean=mean, std=mean),
+            ToTensorV2(),
+            ],
+            bbox_params=A.BboxParams(format="coco")
+            )
+            transforms_dict['eval'] = A.Compose([
+            #A.SmallestMaxSize(max_size=224),
+            A.LongestMaxSize(max_size=256), 
+            #A.CenterCrop(height=224, width=224),  
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+            ],
+            bbox_params=A.BboxParams(format="coco")
+            )
     elif ds == 'voc':
         transforms_dict['train'] = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -293,17 +316,26 @@ def get_transforms(ds):
         print('Not valid dataset')
     return transforms_dict
 
-def get_dataloaders(ds):
-    transforms = get_transforms(ds)
+def get_dataloaders(ds, do_aug=True):
+    transforms_dict = get_transforms(ds)
+    if not do_aug:
+        transforms_dict = {}
+        mean = (0.485, 0.456, 0.406)
+        std = (0.229, 0.224, 0.225)
+        transforms_dict['train'] = transforms.Compose([
+            transforms.ToTensor(), 
+            transforms.Normalize(mean=mean, std=std)
+        ])
+        transforms_dict['eval'] = transforms_dict['train'] 
 
     if ds == 'imagenet':
-        return get_loaders_imagenet(transforms, batch_size=32)
+        return get_loaders_imagenet(transforms_dict, batch_size=32)
     elif ds == 'waterbirds':
-        return get_loaders_waterbirds(transforms, batch_size=64)
+        return get_loaders_waterbirds(transforms_dict, batch_size=64)
     elif ds == 'voc':
-        return get_loaders_voc(transforms, batch_size=64)
+        return get_loaders_voc(transforms_dict, batch_size=64)
     elif ds == 'camelyon':
-        return get_loaders_patchcamelyon(transforms, batch_size=256)
+        return get_loaders_patchcamelyon(transforms_dict, batch_size=256)
     else:
         print('Not valid dataset!')
 
