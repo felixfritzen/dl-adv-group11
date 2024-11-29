@@ -124,7 +124,7 @@ def show_image(image, path, plot = True):
     """Show image directly from dataloader"""
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225] # from imagenet standard
-    image = image.permute(1, 2, 0).numpy()
+    image = image.permute(1, 2, 0).cpu().numpy()
     image = denormalize_image(image, mean, std)
     image = (image * 255).astype(np.uint8)
     if plot:
