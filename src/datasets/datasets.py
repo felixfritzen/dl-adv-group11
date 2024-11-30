@@ -186,12 +186,15 @@ def get_loaders_voc(transforms, batch_size = 64):
 ############## CAMYLON ##############
 
 class PatchCamelyon(Dataset):
-    def __init__(self, root, split='train', transform=None):
+    def __init__(self, root, split='train', transform=None, max_samples = 50000):
         self.root = root
         self.transform = transform
         self.split = split
-        with h5py.File(self.root+self.split2path('x'), "r") as h5:
-            self.num_samples = h5["x"].shape[0] # len
+        self.max_samples = max_samples
+        with h5py.File(self.root + self.split2path('x'), "r") as h5:
+            self.total_samples = h5["x"].shape[0]  # Total number of samples in the file
+        # Limit the number of samples to max_samples or the total number available
+        self.num_samples = min(self.total_samples, self.max_samples)
         
     def __len__(self):
         return self.num_samples
@@ -223,7 +226,7 @@ def get_loaders_patchcamelyon(transforms, splits=['train', 'valid', 'test'], bat
             transform = transforms['train']
         else:
             transform = transforms['eval']
-        dataset = PatchCamelyon('./data/pcamv1/', att, transform)
+        dataset = PatchCamelyon('/home/shared_project/dl-adv-group11/data/pcamv1/', att, transform)
         
         shuffle = True if att == 'train' else False
         if att == 'valid':
