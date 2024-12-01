@@ -99,7 +99,13 @@ def get_loaders_imagenet(transforms, batch_size=32):
     
     for key in ds.keys():
         shuffle = True if key == 'train' else False
-        dataloaders[key] = DataLoader(ds[key], batch_size=batch_size, shuffle=shuffle, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
+        if key == 'val':
+            bs = TEST_BATCH_SIZE
+        if key == 'test':
+            bs = TEST_BATCH_SIZE
+        else: 
+            bs = batch_size
+        dataloaders[key] = DataLoader(ds[key], batch_size=bs, shuffle=shuffle, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
     return dataloaders
 
 
@@ -126,7 +132,7 @@ def get_loaders_waterbirds(transforms, splits=['train', 'val', 'test'], batch_si
             confounder_names=None,
             reverse_problem=False
         )
-        dataloaders[att]= DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
+        dataloaders[att]= DataLoader(dataset, batch_size=TEST_BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
         if att in ['val', 'test']:
             # Filter directly on self.indices to ensure valid subset indices
             id_indices = np.where(
@@ -141,8 +147,8 @@ def get_loaders_waterbirds(transforms, splits=['train', 'val', 'test'], batch_si
             print(f"ID Dataset '{att}': {len(id_dataset)} samples")
             print(f"OOD Dataset '{att}': {len(ood_dataset)} samples")
 
-            dataloaders[f'{att}_id'] = DataLoader(id_dataset, batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
-            dataloaders[f'{att}_ood'] = DataLoader(ood_dataset, batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
+            dataloaders[f'{att}_id'] = DataLoader(id_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
+            dataloaders[f'{att}_ood'] = DataLoader(ood_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
         else:
             dataloaders[att] = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
 
@@ -177,6 +183,7 @@ def get_loaders_voc(transforms, batch_size = 64):
         transform=transforms['eval'])
     
     for key in ds.keys():
+        
         shuffle = True if key == 'train' else False
         dataloaders[key]=DataLoader(ds[key],batch_size=batch_size,
                                     shuffle=shuffle)
@@ -239,8 +246,11 @@ def get_loaders_patchcamelyon(transforms, splits=['train', 'valid', 'test'], bat
         
         shuffle = True if att == 'train' else False
         if att == 'valid':
+            bs = TEST_BATCH_SIZE
             att ='val'
-        dataloaders[att] =  DataLoader(dataset,batch_size=batch_size,
+        else: 
+            bs = batch_size
+        dataloaders[att] =  DataLoader(dataset,batch_size=bs,
                                       shuffle=shuffle, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
     return dataloaders
 
@@ -331,8 +341,10 @@ def get_transforms(ds):
 def get_dataloaders(ds, do_aug=True):
     global NUM_WORKERS # parallell dataloading
     global PREFETCH_FACTOR # load in advance
+    global TEST_BATCH_SIZE
     PREFETCH_FACTOR = 4 
     NUM_WORKERS = 8
+    TEST_BATCH_SIZE = 256
     transforms_dict = get_transforms(ds)
     if not do_aug:
         transforms_dict = {}
