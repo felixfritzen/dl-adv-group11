@@ -14,7 +14,6 @@ import numpy as np
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 ################## ImageNet #####################
-
 class ImagenetDataset(Dataset):
     def __init__(self, transform, labels_path, images_path, mapping, id2name2017):
         self.images_path = images_path
@@ -100,7 +99,7 @@ def get_loaders_imagenet(transforms, batch_size=32):
     
     for key in ds.keys():
         shuffle = True if key == 'train' else False
-        dataloaders[key] = DataLoader(ds[key], batch_size=batch_size, shuffle=shuffle)
+        dataloaders[key] = DataLoader(ds[key], batch_size=batch_size, shuffle=shuffle, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
     return dataloaders
 
 
@@ -127,7 +126,7 @@ def get_loaders_waterbirds(transforms, splits=['train', 'val', 'test'], batch_si
             confounder_names=None,
             reverse_problem=False
         )
-        dataloaders[att]= DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        dataloaders[att]= DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
         if att in ['val', 'test']:
             # Filter directly on self.indices to ensure valid subset indices
             id_indices = np.where(
@@ -142,10 +141,10 @@ def get_loaders_waterbirds(transforms, splits=['train', 'val', 'test'], batch_si
             print(f"ID Dataset '{att}': {len(id_dataset)} samples")
             print(f"OOD Dataset '{att}': {len(ood_dataset)} samples")
 
-            dataloaders[f'{att}_id'] = DataLoader(id_dataset, batch_size=batch_size, shuffle=False)
-            dataloaders[f'{att}_ood'] = DataLoader(ood_dataset, batch_size=batch_size, shuffle=False)
+            dataloaders[f'{att}_id'] = DataLoader(id_dataset, batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
+            dataloaders[f'{att}_ood'] = DataLoader(ood_dataset, batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
         else:
-            dataloaders[att] = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            dataloaders[att] = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
 
     return dataloaders
 
@@ -218,21 +217,31 @@ class PatchCamelyon(Dataset):
     
 
 
-def get_loaders_patchcamelyon(transforms, splits=['train', 'valid', 'test'], batch_size=64):
+def get_loaders_patchcamelyon(transforms, splits=['train', 'valid', 'test'], batch_size=64, total_max_samples=50000):
     """Image and binary target"""
     dataloaders = {}
+    split_ratios = {
+        'train': 0.8,   
+        'valid': 0.1,   
+        'test': 0.1     
+    }
+    split_max_samples = {split: int(total_max_samples * ratio) for split, ratio in split_ratios.items()}
+
     for att in splits: 
         if att == 'train':
             transform = transforms['train']
         else:
             transform = transforms['eval']
-        dataset = PatchCamelyon('/home/shared_project/dl-adv-group11/data/pcamv1/', att, transform)
+            
+        max_samples = split_max_samples.get(att, total_max_samples)
+        
+        dataset = PatchCamelyon('/home/shared_project/dl-adv-group11/data/pcamv1/', att, transform, max_samples=max_samples)
         
         shuffle = True if att == 'train' else False
         if att == 'valid':
             att ='val'
         dataloaders[att] =  DataLoader(dataset,batch_size=batch_size,
-                                      shuffle=shuffle)
+                                      shuffle=shuffle, num_workers=NUM_WORKERS, prefetch_factor=PREFETCH_FACTOR)
     return dataloaders
 
 
@@ -320,6 +329,10 @@ def get_transforms(ds):
     return transforms_dict
 
 def get_dataloaders(ds, do_aug=True):
+    global NUM_WORKERS # parallell dataloading
+    global PREFETCH_FACTOR # load in advance
+    PREFETCH_FACTOR = 4 
+    NUM_WORKERS = 8
     transforms_dict = get_transforms(ds)
     if not do_aug:
         transforms_dict = {}
