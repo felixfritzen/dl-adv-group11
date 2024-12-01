@@ -32,10 +32,10 @@ def pcam_student():
     return model
 
 def waterbirds_teacher():
-    model = xfixup_resnet50(num_classes=2)  # Ensure this matches the fine-tuned model structure
-    model.fc = torch.nn.Linear(model.fc.in_features, 2)  # Ensure the final layer is binary classification
+    model = xfixup_resnet50(num_classes=2).to(torch.device('cuda'))  # Ensure this matches the fine-tuned model structure
+    model.fc = torch.nn.Linear(model.fc.in_features, 2).to(torch.device('cuda'))   # Ensure the final layer is binary classification
     fine_tuned_weights_path =MODEL_PATH +"resnet50_augmented_fc_200epoker.pth"
-    model.load_state_dict(torch.load(fine_tuned_weights_path))
+    model.load_state_dict(torch.load(fine_tuned_weights_path, map_location=torch.device('cuda')))
     return model
 
 def waterbirds_student():

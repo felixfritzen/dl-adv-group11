@@ -11,11 +11,12 @@ import argparse
 import datasets.datasets as datasets
 import model_functions
 import matplotlib.pyplot as plt
-from our_models import pcam_teacher
-
+from our_models import pcam_teacher, waterbirds_teacher
+import utils
+import os
 # Device setup
-device = 'cuda:2' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-print(f"Using device: {device}")
+device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+
 
 def calculate_agreement(student, teacher, dataloader):
     """
@@ -251,6 +252,10 @@ def evaluate(model, dataloader, num_classes):
     return top1_accuracy, top5_accuracy
 
 def main(args):
+    #global device
+    #device = f'cuda:{args.device}' 
+    #device = f'cuda' 
+    print(f"Using device: {device}")
     # Load datasets
     if args.dataset == 'waterbirds':
         has_id_ood = True
@@ -264,6 +269,13 @@ def main(args):
     else:
         raise ValueError(f"Unsupported dataset: {args.dataset}")
     
+
+    global EXPERIMENT_PATH 
+    EXPERIMENT_PATH = f"/home/shared_project/dl-adv-group11/src/experiments/{args.dataset}/"
+    os.makedirs(EXPERIMENT_PATH, exist_ok=True)
+
+    metrics_checkpoint_path = f"{args.dataset}_{args.experiment}_metrics_checkpoint.pth"
+    fig_path = f"{args.dataset}_{args.experiment}_plot_metrics.png"
     dataloaders = datasets.get_dataloaders(args.dataset)
 
     student = models.resnet18(pretrained=False).to(device)
@@ -271,12 +283,12 @@ def main(args):
     
     if args.resume:
         print(f"Resuming training from: {args.resume}")
-        checkpoint = torch.load(args.resume)
+        checkpoint = torch.load(args.resume, map_location=lambda storage, loc: storage.cuda(0))
         student.load_state_dict(checkpoint)
-        start_epoch = 80
+        start_epoch = utils.path2num(args.resume)
         print(f"Starting from epoch: {start_epoch}")
         try:
-            metrics = torch.load(f"metrics_checkpoint_{args.dataset}_{args.experiment}.pth")
+            metrics = torch.load(EXPERIMENT_PATH+metrics_checkpoint_path)
             print("Loaded metrics from checkpoint.")
         except FileNotFoundError:
             print("Metrics checkpoint not found. Initializing empty metrics.")
@@ -307,6 +319,8 @@ def main(args):
         elif args.dataset == "camelyon":
             teacher = pcam_teacher()
             teacher = teacher.to(device)
+        elif args.dataset == "waterbirds":
+            teacher = waterbirds_teacher()#.to(torch.device('cuda:0'))
         teacher.eval()  # Freeze teacher weights
         if args.experiment == "e2KD":
             gradcam_teacher = model_functions.GradCAM(teacher, target_layer="layer4")
@@ -314,6 +328,11 @@ def main(args):
 
     # Optimizer and Scheduler
     optimizer = torch.optim.AdamW(student.parameters(), lr=0.01, weight_decay=1e-4)
+
+    tunable_params = [p for p in student.parameters() if p.requires_grad]
+    print("Tunable Parameters:")
+    for param in tunable_params:
+        print(param.size())
 
     scheduler = SequentialLR(
     optimizer,
@@ -330,6 +349,7 @@ def main(args):
             scheduler.step()
         
     # Early Stopping Variables
+    val_top1_acc = -1.0
     best_val_top1_acc = 0.0  # Initialize the best validation top-1 accuracy
     patience = 10            # Number of epochs to wait after last improvement
     epochs_no_improve = 0    # Counter for epochs since last improvement
@@ -384,21 +404,23 @@ def main(args):
             print(f"Out-of-Distribution Top-1 Accuracy: {ood_top1_acc:.4f}, Top-5 Accuracy: {ood_top5_acc:.4f}")
             metrics["val_top1_acc"].append(id_top1_acc)  # Use ID accuracy as val accuracy
             metrics["val_top5_acc"].append(id_top5_acc)
+            val_top1_acc =id_top1_acc
         else:
             val_top1_acc, val_top5_acc = evaluate(student, dataloaders['val'], num_classes)
             print(f"Validation Top-1 Accuracy: {val_top1_acc:.4f}, Top-5 Accuracy: {val_top5_acc:.4f}")
             metrics["val_top1_acc"].append(val_top1_acc)
             metrics["val_top5_acc"].append(val_top5_acc)
 
-        plot_metrics_live(metrics, epoch + 1, save_path=f"training_metrics_{args.dataset}_{args.experiment}.png")
-        
+        plot_metrics_live(metrics, epoch + 1, save_path=EXPERIMENT_PATH+fig_path)
+        torch.save(metrics, EXPERIMENT_PATH+metrics_checkpoint_path)
         # Early Stopping Check
+    
         if val_top1_acc > best_val_top1_acc:
             best_val_top1_acc = val_top1_acc
             epochs_no_improve = 0
 
             # Save the best model
-            best_model_path = f"/home/shared_project/dl-adv-group11/models/weights/imagenet/best_student_model_{args.dataset}_{args.experiment}.pth"
+            best_model_path = EXPERIMENT_PATH+f"/best_student_model_{args.dataset}_{args.experiment}.pth"
             torch.save(student.state_dict(), best_model_path)
             print(f"New best model saved: {best_model_path}")
         else:
@@ -415,7 +437,7 @@ def main(args):
 
         # Save the model every 10 epochs
         if (epoch + 1) % 10 == 0:
-            model_path = f"/home/shared_project/dl-adv-group11/models/weights/imagenet/student_model_{args.dataset}_{args.experiment}_epoch_{epoch + 1}.pth"
+            model_path = EXPERIMENT_PATH+f"student_model_{args.dataset}_{args.experiment}_epoch_{epoch + 1}.pth"
             torch.save(student.state_dict(), model_path)
             print(f"Model saved: {model_path}")
 
@@ -427,12 +449,20 @@ def main(args):
         test_ood_top1_acc, test_ood_top5_acc = evaluate(student, dataloaders['test_ood'], num_classes)
         print(f"Test In-Distribution Top-1 Accuracy: {test_id_top1_acc:.4f}, Top-5 Accuracy: {test_id_top5_acc:.4f}")
         print(f"Test Out-of-Distribution Top-1 Accuracy: {test_ood_top1_acc:.4f}, Top-5 Accuracy: {test_ood_top5_acc:.4f}")
+        agreement_id = calculate_agreement(student, teacher, dataloaders['test_id'])
+        print(f"In-Distribution Agreement with Teacher: {agreement_id:.4f}")
+
+        agreement_ood = calculate_agreement(student, teacher, dataloaders['test_ood'])
+        print(f"Out-of-Distribution Agreement with Teacher: {agreement_ood:.4f}")
     else:
         test_top1_acc, test_top5_acc = evaluate(student, dataloaders['test'], num_classes)
         print(f"Test Top-1 Accuracy: {test_top1_acc:.4f}, Top-5 Accuracy: {test_top5_acc:.4f}")
 
+        agreement = calculate_agreement(student, teacher, dataloaders['test'])
+        print(f"Out-of-Distribution Agreement with Teacher: {agreement:.4f}")
+
     # Save the final model
-    model_name = f"student_model_{args.dataset}_{args.experiment}.pth"
+    model_name = EXPERIMENT_PATH+f"student_model_{args.dataset}_{args.experiment}.pth"
     torch.save(student.state_dict(), model_name)
     print(f"Final model saved as '{model_name}'.")
 
@@ -445,6 +475,9 @@ if __name__ == "__main__":
     parser.add_argument("--temperature", type=float, default=5.0, help="Temperature for KD loss.")
     parser.add_argument("--lambda_weight", type=float, default=5, help="Weight for explanation loss in e2KD.")
     parser.add_argument("--resume", type=str, default=None, help="Path to a saved model to resume training.")
+    parser.add_argument("--device", type=int, default=0, help="Device 0,1,2,3")
     args = parser.parse_args()
+
+    print(torch.get_num_threads())
 
     main(args)
