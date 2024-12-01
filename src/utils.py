@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import requests
 import numpy as np
+import re
 
 def key2key(dict1, dict2):
     """If targets are the same, maps key to key"""
@@ -198,3 +199,11 @@ def plot_waterbirds_result(our_accuracy, our_agreement, path):
     plt.savefig('test.png')
     plt.savefig(path)
     plt.show()
+
+
+def path2num(path):
+    """ex waterbirds/student_model_waterbirds_kd_epoch_40.pth returns 40"""
+    number = re.search(r"epoch_(\d+)", path)
+    return int(number.group(1))
+
+
