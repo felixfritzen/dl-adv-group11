@@ -11,9 +11,10 @@ import argparse
 import datasets.datasets as datasets
 import model_functions
 import matplotlib.pyplot as plt
+from our_models import pcam_teacher
 
 # Device setup
-device = 'cuda:0' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+device = 'cuda:2' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 print(f"Using device: {device}")
 
 def calculate_agreement(student, teacher, dataloader):
@@ -139,7 +140,7 @@ def plot_gradcam_heatmaps(student, teacher, dataloader, gradcam_student, gradcam
         plt.savefig(save_path)
         plt.close()
 
-def train_epoch(student, teacher, dataloader, optimizer, scheduler, num_classes, gradcam_student=None, gradcam_teacher=None, temperature=4.0, lambda_weight=0.5, experiment="e2KD"):
+def train_epoch(student, teacher, dataloader, optimizer, scheduler, num_classes, gradcam_student=None, gradcam_teacher=None, temperature=4.0, lambda_weight=5, experiment="e2KD"):
     """
     Train for one epoch using the specified experiment type (baseline, kd, or e2KD).
     """
@@ -151,7 +152,10 @@ def train_epoch(student, teacher, dataloader, optimizer, scheduler, num_classes,
     
     # Initialize metrics
     top1_metric = MulticlassAccuracy(num_classes=num_classes, top_k=1).to(device)
-    top5_metric = MulticlassAccuracy(num_classes=num_classes, top_k=5).to(device)
+    if num_classes == 2:
+        top5_metric = MulticlassAccuracy(num_classes=num_classes, top_k=2).to(device)
+    else:
+        top5_metric = MulticlassAccuracy(num_classes=num_classes, top_k=5).to(device)
 
     for batch in tqdm(dataloader, desc="Training"):
         if len(batch) == 3:  # Imagenet has explanations whilst waterbirds do not
@@ -181,14 +185,12 @@ def train_epoch(student, teacher, dataloader, optimizer, scheduler, num_classes,
                 teacher_explanations = gradcam_teacher.generate_heatmap(images, device).detach()
                 student_explanations = gradcam_student.generate_heatmap(images, device).detach()
                 e2kd_loss = model_functions.e2KD_loss(student_logits, teacher_logits, student_explanations, teacher_explanations, temperature, lambda_weight)
-                gt_loss = nn.CrossEntropyLoss()(student_logits, labels)
-                loss = 2*e2kd_loss + 1*gt_loss
-                scaler.scale(loss).backward()  # Retain the graph for GradCAM gradients
+                loss = e2kd_loss 
             else:
                 raise ValueError(f"Unknown experiment type: {experiment}")
 
         # Scale loss and backward pass
-        #scaler.scale(loss).backward()
+        scaler.scale(loss).backward()
 
         # Gradient clipping
         scaler.unscale_(optimizer)
@@ -224,8 +226,10 @@ def evaluate(model, dataloader, num_classes):
 
     # Initialize TorchMetrics metrics for Top-1 and Top-5 accuracy
     top1_metric = MulticlassAccuracy(num_classes=num_classes, top_k=1).to(device)
-    top5_metric = MulticlassAccuracy(num_classes=num_classes, top_k=5).to(device)
-
+    if num_classes == 2:
+        top5_metric = MulticlassAccuracy(num_classes=num_classes, top_k=2).to(device)
+    else:
+        top5_metric = MulticlassAccuracy(num_classes=num_classes, top_k=5).to(device)
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Evaluating"):
             if len(batch) == 3:
@@ -269,7 +273,7 @@ def main(args):
         print(f"Resuming training from: {args.resume}")
         checkpoint = torch.load(args.resume)
         student.load_state_dict(checkpoint)
-        start_epoch = 20
+        start_epoch = 80
         print(f"Starting from epoch: {start_epoch}")
         try:
             metrics = torch.load(f"metrics_checkpoint_{args.dataset}_{args.experiment}.pth")
@@ -297,8 +301,12 @@ def main(args):
     teacher = None
     gradcam_teacher = gradcam_student = None
     if args.experiment in ["kd", "e2KD"]:
-        teacher = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1).to(device)
-        #teacher.fc = nn.Linear(teacher.fc.in_features, num_classes).to(device)
+        if args.dataset == "imagenet":
+            teacher = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1).to(device)
+            #teacher.fc = nn.Linear(teacher.fc.in_features, num_classes).to(device)
+        elif args.dataset == "camelyon":
+            teacher = pcam_teacher()
+            teacher = teacher.to(device)
         teacher.eval()  # Freeze teacher weights
         if args.experiment == "e2KD":
             gradcam_teacher = model_functions.GradCAM(teacher, target_layer="layer4")
@@ -390,7 +398,7 @@ def main(args):
             epochs_no_improve = 0
 
             # Save the best model
-            best_model_path = f"best_student_model_{args.dataset}_{args.experiment}.pth"
+            best_model_path = f"/home/shared_project/dl-adv-group11/models/weights/imagenet/best_student_model_{args.dataset}_{args.experiment}.pth"
             torch.save(student.state_dict(), best_model_path)
             print(f"New best model saved: {best_model_path}")
         else:
@@ -407,7 +415,7 @@ def main(args):
 
         # Save the model every 10 epochs
         if (epoch + 1) % 10 == 0:
-            model_path = f"student_model_{args.dataset}_{args.experiment}_epoch_{epoch + 1}.pth"
+            model_path = f"/home/shared_project/dl-adv-group11/models/weights/imagenet/student_model_{args.dataset}_{args.experiment}_epoch_{epoch + 1}.pth"
             torch.save(student.state_dict(), model_path)
             print(f"Model saved: {model_path}")
 
@@ -424,7 +432,7 @@ def main(args):
         print(f"Test Top-1 Accuracy: {test_top1_acc:.4f}, Top-5 Accuracy: {test_top5_acc:.4f}")
 
     # Save the final model
-    model_name = f"student_model_{args.experiment}.pth"
+    model_name = f"student_model_{args.dataset}_{args.experiment}.pth"
     torch.save(student.state_dict(), model_name)
     print(f"Final model saved as '{model_name}'.")
 
@@ -435,7 +443,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs.")
     parser.add_argument("--lr", type=float, default=0.01, help="Initial learning rate.")
     parser.add_argument("--temperature", type=float, default=5.0, help="Temperature for KD loss.")
-    parser.add_argument("--lambda_weight", type=float, default=0.5, help="Weight for explanation loss in e2KD.")
+    parser.add_argument("--lambda_weight", type=float, default=5, help="Weight for explanation loss in e2KD.")
     parser.add_argument("--resume", type=str, default=None, help="Path to a saved model to resume training.")
     args = parser.parse_args()
 
