@@ -119,8 +119,8 @@ def plot_gradcam_heatmaps(student, teacher, dataloader, gradcam_student, gradcam
 
     with torch.no_grad():
         # Generate heatmaps
-        student_heatmaps = gradcam_student.generate_heatmap(images, device)
-        teacher_heatmaps = gradcam_teacher.generate_heatmap(images, device)
+        student_heatmaps,_ = gradcam_student.generate_heatmap(images, device)
+        teacher_heatmaps,_ = gradcam_teacher.generate_heatmap(images, device)
 
     # Save a few samples
     for i in range(min(5, len(images))):
@@ -170,21 +170,32 @@ def train_epoch(student, teacher, dataloader, optimizer, scheduler, num_classes,
 
         # Mixed precision context
         with autocast():
-            student_logits = student(images)
 
             if experiment == "baseline":
+                student_logits = student(images)
                 loss = nn.CrossEntropyLoss()(student_logits, labels)
             elif experiment == "kd":
                 with torch.no_grad():
                     teacher_logits = teacher(images)
+                student_logits = student(images)
                 kd_loss = model_functions.kd_loss(student_logits, teacher_logits, temperature)
                 gt_loss = nn.CrossEntropyLoss()(student_logits, labels)
                 loss = 2*kd_loss + 1*gt_loss
+                #loss = kd_loss
             elif experiment == "e2KD":
-                with torch.no_grad():
-                    teacher_logits = teacher(images)
-                teacher_explanations = gradcam_teacher.generate_heatmap(images, device).detach()
-                student_explanations = gradcam_student.generate_heatmap(images, device).detach()
+                teacher_explanations, teacher_logits = gradcam_teacher.generate_heatmap(images, device, retain=False)
+                student_explanations, student_logits = gradcam_student.generate_heatmap(images, device, retain=True)
+                
+                teacher_explanations = teacher_explanations.detach()
+                teacher_logits = teacher_logits.detach()
+
+                student_explanations = student_explanations.detach()
+
+                if True: # as before, did no work using generate_heatmap
+                    student_logits = student(images)
+                    with torch.no_grad():
+                        teacher_logits = teacher(images)
+
                 e2kd_loss = model_functions.e2KD_loss(student_logits, teacher_logits, student_explanations, teacher_explanations, temperature, lambda_weight)
                 loss = e2kd_loss 
             else:
@@ -330,9 +341,9 @@ def main(args):
     optimizer = torch.optim.AdamW(student.parameters(), lr=0.01, weight_decay=1e-4)
 
     tunable_params = [p for p in student.parameters() if p.requires_grad]
-    print("Tunable Parameters:")
-    for param in tunable_params:
-        print(param.size())
+    # print("Tunable Parameters:")
+    # for param in tunable_params:
+    #     print(param.size())
 
     scheduler = SequentialLR(
     optimizer,
@@ -351,7 +362,7 @@ def main(args):
     # Early Stopping Variables
     val_top1_acc = -1.0
     best_val_top1_acc = 0.0  # Initialize the best validation top-1 accuracy
-    patience = 10            # Number of epochs to wait after last improvement
+    patience = 500            # Number of epochs to wait after last improvement
     epochs_no_improve = 0    # Counter for epochs since last improvement
     early_stop = False       # Flag to indicate whether to stop training
 
@@ -420,16 +431,16 @@ def main(args):
             epochs_no_improve = 0
 
             # Save the best model
-            best_model_path = EXPERIMENT_PATH+f"/best_student_model_{args.dataset}_{args.experiment}.pth"
+            best_model_path = EXPERIMENT_PATH+f"best_student_model_{args.dataset}_{args.experiment}.pth"
             torch.save(student.state_dict(), best_model_path)
             print(f"New best model saved: {best_model_path}")
         else:
-            #epochs_no_improve += 1
+            epochs_no_improve += 1
             print(f"No improvement in validation accuracy for {epochs_no_improve} epoch(s).")
 
         if epochs_no_improve >= patience:
             print(f"Validation accuracy did not improve for {patience} epochs. Early stopping.")
-            #early_stop = True
+            early_stop = True
 
         # Save Grad-CAM heatmaps every 15 epochs
         if args.experiment == "e2KD" and epoch % 15 == 0:
@@ -459,12 +470,13 @@ def main(args):
         print(f"Test Top-1 Accuracy: {test_top1_acc:.4f}, Top-5 Accuracy: {test_top5_acc:.4f}")
 
         agreement = calculate_agreement(student, teacher, dataloaders['test'])
-        print(f"Out-of-Distribution Agreement with Teacher: {agreement:.4f}")
+        print(f"Agreement with Teacher: {agreement:.4f}")
 
     # Save the final model
-    model_name = EXPERIMENT_PATH+f"student_model_{args.dataset}_{args.experiment}.pth"
-    torch.save(student.state_dict(), model_name)
-    print(f"Final model saved as '{model_name}'.")
+    if args.epochs !=1:
+        model_name = EXPERIMENT_PATH+f"student_model_{args.dataset}_{args.experiment}.pth"
+        torch.save(student.state_dict(), model_name)
+        print(f"Final model saved as '{model_name}'.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training script for baseline, KD, and e2KD experiments.")

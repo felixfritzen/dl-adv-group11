@@ -1,3 +1,4 @@
+import torch
 import torch.nn.functional as F
 
 def kd_loss(student_logits, teacher_logits, temperature):
@@ -53,9 +54,9 @@ class GradCAM:
         for name, module in self.model.named_modules():
             if name == self.target_layer:
                 module.register_forward_hook(forward_hook)
-                module.register_backward_hook(backward_hook)
+                module.register_full_backward_hook(backward_hook)
 
-    def generate_heatmap(self, input_tensor, class_idx=None):
+    def generate_heatmap(self, input_tensor, device, class_idx=None, retain=False):
         """
         Generate a GradCAM heatmap.
         Args:
@@ -64,16 +65,21 @@ class GradCAM:
         Returns:
             torch.Tensor: Resized GradCAM heatmap.
         """
+        input_tensor = input_tensor.to(device)
         self.model.zero_grad()
+        
+        input_tensor.requires_grad = True
 
         # Forward pass
         outputs = self.model(input_tensor)  # (1, num_classes)
         if class_idx is None:
-            class_idx = outputs.argmax(dim=1).item()
+            class_idx = outputs.argmax(dim=1)
 
         # Compute gradients for the target class
-        target_score = outputs[:, class_idx]
-        target_score.backward()
+        batch_size = input_tensor.size(0)
+        target_scores = outputs[torch.arange(batch_size), class_idx]  # (batch_size,)
+        
+        target_scores.backward(gradient=torch.ones_like(target_scores))# TODO retain_graph=retain, men ger bug 
 
         # Compute weights and GradCAM heatmap
         weights = self.gradients.mean(dim=(2, 3), keepdim=True)  # (batch, channels, 1, 1)
@@ -81,7 +87,8 @@ class GradCAM:
         cam = F.relu(cam)  # Apply ReLU to keep positive values only
 
         # Normalize and resize the heatmap
-        cam = F.interpolate(cam, size=input_tensor.shape[2:], mode='bilinear', align_corners=False)
-        cam = cam - cam.min()
-        cam = cam / cam.max()
-        return cam.squeeze(0).squeeze(0)  # Return single-channel heatmap
+        cam = F.interpolate(cam, size=input_tensor.shape[2:], mode='bilinear', align_corners=False)  # (batch, 1, H, W)
+        cam = cam - cam.view(batch_size, -1).min(dim=1)[0].view(batch_size, 1, 1, 1)
+        cam = cam / cam.view(batch_size, -1).max(dim=1)[0].view(batch_size, 1, 1, 1)
+
+        return cam.squeeze(1), outputs  # Return (batch_size, H, W)
