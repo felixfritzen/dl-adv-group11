@@ -271,7 +271,7 @@ def empty_metric():
         "agreement": [], 
         "epoch_train": [],
         "epoch_eval": [],
-        "best_loss": [],
+        "best_loss": 0,
     }
     return metrics
 
@@ -317,7 +317,7 @@ def main(args):
             start_epoch = utils.path2num(args.resume)
         except:
             print("No epoch in path")
-            start_epoch = 0
+            start_epoch = 1
         try:
             metrics = torch.load(EXPERIMENT_PATH+metrics_checkpoint_path)
             print("Loaded metrics from checkpoint.")
@@ -326,13 +326,13 @@ def main(args):
             if last_epoch:  
                 start_epoch = last_epoch[-1]
             else:
-                start_epoch = 0  
+                start_epoch = 1
         except FileNotFoundError:
             print("Metrics checkpoint not found. Initializing empty metrics.")
             metrics = empty_metric()
-            start_epoch = 0
+            start_epoch = 1
     else:
-        start_epoch = 0
+        start_epoch = 1
         metrics = empty_metric()
 
     print(f"Starting from epoch: {start_epoch}")
@@ -363,7 +363,7 @@ def main(args):
     scheduler = SequentialLR(
     optimizer,
     schedulers=[
-        LambdaLR(optimizer, lr_lambda=lambda epoch: (epoch + 1) / 5),  # Warmup for 5 epochs
+        LambdaLR(optimizer, lr_lambda=lambda epoch: (epoch) / 5),  # Warmup for 5 epochs
         CosineAnnealingLR(optimizer, T_max=args.epochs) 
     ],
     milestones=[5]
@@ -375,7 +375,7 @@ def main(args):
             scheduler.step()
         
     # Early Stopping Variables
-    best_val_top1_acc =  metrics.get('best_loss', 0)  # Initialize the best validation top-1 accuracy
+    metrics['best_loss'] =  metrics.get('best_loss', 0)  # Initialize the best validation top-1 accuracy
     patience = 500            # Number of epochs to wait after last improvement
     epochs_no_improve = 0    # Counter for epochs since last improvement
     early_stop = False       # Flag to indicate whether to stop training
@@ -383,23 +383,26 @@ def main(args):
     # Initialize live plotting
     plt.ion()  # Turn on interactive mode
     # Training loop
-    for epoch in range(start_epoch, args.epochs):
+    for epoch in range(start_epoch-1, args.epochs+1):
+
         if early_stop:
             print("Early stopping triggered. Stopping training.")
             break
         
-        print(f"Epoch {epoch + 1}/{args.epochs}")
-        train_loss, train_top1_acc, train_top5_acc = train_epoch(
-            student, teacher, dataloaders[args.set], optimizer, scheduler, num_classes,
-            gradcam_student=gradcam_student, gradcam_teacher=gradcam_teacher,
-            temperature=args.temperature, lambda_weight=args.lambda_weight,
-            experiment=args.experiment
-        )
+        print(f"Epoch {epoch}/{args.epochs}")
+
+        if epoch!=0: # calculate baseline first
+            train_loss, train_top1_acc, train_top5_acc = train_epoch(
+                student, teacher, dataloaders[args.set], optimizer, scheduler, num_classes,
+                gradcam_student=gradcam_student, gradcam_teacher=gradcam_teacher,
+                temperature=args.temperature, lambda_weight=args.lambda_weight,
+                experiment=args.experiment
+            )
         
-        print(f"Train Loss: {train_loss:.4f}, Train Top-1 Acc: {train_top1_acc:.4f}, Train Top-5 Acc: {train_top5_acc:.4f}")
-        metrics["train_top1_acc"].append(train_top1_acc)
-        metrics["train_top5_acc"].append(train_top5_acc)
-        metrics["epoch_train"].append(epoch)
+            print(f"Train Loss: {train_loss:.4f}, Train Top-1 Acc: {train_top1_acc:.4f}, Train Top-5 Acc: {train_top5_acc:.4f}")
+            metrics["train_top1_acc"].append(train_top1_acc)
+            metrics["train_top5_acc"].append(train_top5_acc)
+            metrics["epoch_train"].append(epoch)
 
         if epoch%args.evalstep==0: # do not eval each epoch
             metrics["epoch_eval"].append(epoch)
@@ -465,7 +468,7 @@ def main(args):
             pass#plot_gradcam_heatmaps(student, teacher, dataloaders['val'], gradcam_student, gradcam_teacher, epoch + 1)
 
         # Save the model every 10 epochs
-        if (epoch + 1) % 10 == 0:
+        if (epoch) % 10 == 0:
             model_path = EXPERIMENT_PATH+f"student_model_{args.dataset}_{args.experiment}_epoch_{epoch + 1}.pth"
             torch.save(student.state_dict(), model_path)
             print(f"Model saved: {model_path}")
@@ -511,6 +514,6 @@ if __name__ == "__main__":
     parser.add_argument("--evalstep", type=int, default=1, help="How often do eval")
     args = parser.parse_args()
 
-    print(torch.get_num_threads())
+    print('threads: ',torch.get_num_threads())
 
     main(args)
