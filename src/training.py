@@ -375,14 +375,13 @@ def main(args):
             scheduler.step()
         
     # Early Stopping Variables
-    best_val_top1_acc =  metrics.get('best_loss', [])  # Initialize the best validation top-1 accuracy
+    best_val_top1_acc =  metrics.get('best_loss', 0)  # Initialize the best validation top-1 accuracy
     patience = 500            # Number of epochs to wait after last improvement
     epochs_no_improve = 0    # Counter for epochs since last improvement
     early_stop = False       # Flag to indicate whether to stop training
 
     # Initialize live plotting
     plt.ion()  # Turn on interactive mode
-
     # Training loop
     for epoch in range(start_epoch, args.epochs):
         if early_stop:
@@ -438,9 +437,9 @@ def main(args):
                 print(f"Validation Top-1 Accuracy: {val_top1_acc:.4f}, Top-5 Accuracy: {val_top5_acc:.4f}")
                 metrics["val_top1_acc"].append(val_top1_acc)
                 metrics["val_top5_acc"].append(val_top5_acc)
-        
-            if val_top1_acc > best_val_top1_acc:
-                best_val_top1_acc = val_top1_acc
+
+            if val_top1_acc > metrics['best_loss']:
+                metrics['best_loss'] = val_top1_acc
                 epochs_no_improve = 0
 
                 # Save the best model
