@@ -87,7 +87,7 @@ class GradCAM:
             logits_to_explain = outputs[torch.arange(batch_size), class_idx]  # (batch_size,)
             # Compute gradients only for specific tensors
             logits_to_explain.sum().backward(
-            inputs=[input_tensor], create_graph=True, retain_graph=True
+            inputs=[input_tensor], create_graph=retain, retain_graph=retain
             )
         # Compute weights and GradCAM heatmap
         weights = self.gradients.mean(dim=(2, 3), keepdim=True)  # (batch, channels, 1, 1)
