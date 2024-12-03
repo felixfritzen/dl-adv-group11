@@ -22,12 +22,12 @@ print("Using device:", device)
 
 
 def demo():
-    for ds in ['voc', 'waterbirds', 'camelyon', 'imagenet']:
+    for ds in ['waterbirds', 'camelyon', 'imagenet']:
         dataloaders = datasets.datasets.get_dataloaders(ds)
         print(ds)
         utils.get_info(dataloaders)
 
-    training.eval(device, dataloaders, False) # only imagenet atm
+    #training.eval(device, dataloaders, False) # only imagenet atm
 
 def inspect_dataloader(dataloaders):
     images, labels = next(iter(dataloaders['train']))
@@ -47,12 +47,12 @@ def show_dataloader_demo():
 def demo_waterbirds_acc():
     # values for ["700 epochs OOD", "700 epochs ID", "+5x training OOD", "+5x training ID"]
     accuracy_data = {
-        "KD": [71.2, 78.8, 76.5, 81.1],
-        "e$^2$KD": [73.5, 79.8, 78.0, 82.4]
+        "KD": [38.74, 92.72, 38.74, 92.72],
+        "e$^2$KD": [34.65, 91.13, 34.65, 91.13]
     }
     agreement_data = {
-        "KD": [68.7, 75.2, 72.8, 77.9],
-        "e$^2$KD": [70.3, 76.4, 74.5, 79.3]
+        "KD": [59.96, 93.96, 59.96, 93.96],
+        "e$^2$KD": [58.23, 94.06, 58.23, 94.06]
     }
     utils.plot_waterbirds_result(accuracy_data, agreement_data, './figs/waterbirds/wb_result.png')
 
@@ -65,8 +65,8 @@ def main():
     #print(dataloaders)
     #inspect_dataloader(dataloaders)
     #show_dataloader_demo()
-    #demo_waterbirds_acc()\
-    demo()
+    demo_waterbirds_acc()
+    #demo()
     
 
 if __name__ == "__main__":
