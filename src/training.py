@@ -189,9 +189,9 @@ def train_epoch(student, teacher, dataloader, optimizer, scheduler, num_classes,
                 teacher_explanations = teacher_explanations.detach()
                 teacher_logits = teacher_logits.detach()
 
-                student_explanations = student_explanations.detach()
+                #student_explanations = student_explanations.detach()
 
-                if True: # as before, did no work using generate_heatmap
+                if False: # as before, did no work using generate_heatmap
                     student_logits = student(images)
                     with torch.no_grad():
                         teacher_logits = teacher(images)
@@ -282,7 +282,7 @@ def main(args):
     
 
     global EXPERIMENT_PATH 
-    EXPERIMENT_PATH = f"/home/shared_project/dl-adv-group11/src/experiments/{args.dataset}/"
+    EXPERIMENT_PATH = f"/home/shared_project/dl-adv-group11/src/experiments/{args.dataset}/{args.nr}/"
     os.makedirs(EXPERIMENT_PATH, exist_ok=True)
 
     metrics_checkpoint_path = f"{args.dataset}_{args.experiment}_metrics_checkpoint.pth"
@@ -377,7 +377,7 @@ def main(args):
         
         print(f"Epoch {epoch + 1}/{args.epochs}")
         train_loss, train_top1_acc, train_top5_acc = train_epoch(
-            student, teacher, dataloaders['train'], optimizer, scheduler, num_classes,
+            student, teacher, dataloaders[args.set], optimizer, scheduler, num_classes,
             gradcam_student=gradcam_student, gradcam_teacher=gradcam_teacher,
             temperature=args.temperature, lambda_weight=args.lambda_weight,
             experiment=args.experiment
@@ -408,6 +408,7 @@ def main(args):
             metrics["agreement"].append(0.0)
 
         # Evaluate for Waterbirds (ID/OOD) or default behavior
+        metrics["epoch"].append(val_top5_acc)
         if has_id_ood:
             id_top1_acc, id_top5_acc = evaluate(student, dataloaders['val_id'], num_classes)
             ood_top1_acc, ood_top5_acc = evaluate(student, dataloaders['val_ood'], num_classes)
@@ -488,6 +489,8 @@ if __name__ == "__main__":
     parser.add_argument("--lambda_weight", type=float, default=5, help="Weight for explanation loss in e2KD.")
     parser.add_argument("--resume", type=str, default=None, help="Path to a saved model to resume training.")
     parser.add_argument("--device", type=int, default=0, help="Device 0,1,2,3")
+    parser.add_argument("--set", type=str, default='train', help="Set to train on")
+    parser.add_argument("--nr", type=int, default=0, help="Experiment number")
     args = parser.parse_args()
 
     print(torch.get_num_threads())

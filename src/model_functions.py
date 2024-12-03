@@ -69,6 +69,7 @@ class GradCAM:
         self.model.zero_grad()
         
         input_tensor.requires_grad = True
+        input_tensor.grad = None
 
         # Forward pass
         outputs = self.model(input_tensor)  # (1, num_classes)
@@ -79,8 +80,15 @@ class GradCAM:
         batch_size = input_tensor.size(0)
         target_scores = outputs[torch.arange(batch_size), class_idx]  # (batch_size,)
         
-        target_scores.backward(gradient=torch.ones_like(target_scores))# TODO retain_graph=retain, men ger bug 
 
+        if False:
+            target_scores.backward(gradient=torch.ones_like(target_scores))# TODO retain_graph=retain, men ger bug 
+        if True:
+            logits_to_explain = outputs[torch.arange(batch_size), class_idx]  # (batch_size,)
+            # Compute gradients only for specific tensors
+            logits_to_explain.sum().backward(
+            inputs=[input_tensor], create_graph=True, retain_graph=True
+            )
         # Compute weights and GradCAM heatmap
         weights = self.gradients.mean(dim=(2, 3), keepdim=True)  # (batch, channels, 1, 1)
         cam = (weights * self.activations).sum(dim=1, keepdim=True)  # (batch, 1, H, W)
@@ -90,5 +98,5 @@ class GradCAM:
         cam = F.interpolate(cam, size=input_tensor.shape[2:], mode='bilinear', align_corners=False)  # (batch, 1, H, W)
         cam = cam - cam.view(batch_size, -1).min(dim=1)[0].view(batch_size, 1, 1, 1)
         cam = cam / cam.view(batch_size, -1).max(dim=1)[0].view(batch_size, 1, 1, 1)
-
+        input_tensor.grad = None # otherwise CUDA memory error
         return cam.squeeze(1), outputs  # Return (batch_size, H, W)
