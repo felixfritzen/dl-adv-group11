@@ -3,15 +3,8 @@ import torch
 import torchvision.models as models
 from fixup_resnet import xfixup_resnet50 
 
-
-MODEL_PATH = "/home/shared_project/dl-adv-group11/models/weights/"
-FIGURE_PATH = "/home/shared_project/dl-adv-group11/figs/"
-
-MODEL_PATH +="waterbirds/"
-FIGURE_PATH +="waterbirds/"
-
 def pcam_teacher():
-    checkpoint_path = "/home/shared_project/dl-adv-group11/models/teachers/pcam/model.safetensors"
+    checkpoint_path = "/home/shared_project/dl-adv-group11/models/teachers/camelyon/model.safetensors"
     state_dict = load_file(checkpoint_path)
 
     model = models.resnet50()
@@ -34,7 +27,7 @@ def pcam_student():
 def waterbirds_teacher():
     model = xfixup_resnet50(num_classes=2).to(torch.device('cuda'))  # Ensure this matches the fine-tuned model structure
     model.fc = torch.nn.Linear(model.fc.in_features, 2).to(torch.device('cuda'))   # Ensure the final layer is binary classification
-    fine_tuned_weights_path =MODEL_PATH +"resnet50_augmented_fc_200epoker.pth"
+    fine_tuned_weights_path = "/home/shared_project/dl-adv-group11/models/teachers/waterbirds/resnet50_augmented_fc_200epoker.pth"
     model.load_state_dict(torch.load(fine_tuned_weights_path, map_location=torch.device('cuda')))
     return model
 
