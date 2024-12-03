@@ -76,6 +76,7 @@ def get_loaders_imagenet(transforms, batch_size=32):
     # Load the full dataset indices
     total_size = len(ImagenetDataset(None, labels_path, images_path, mapping, id2name2017))
     indices = list(range(total_size))
+    np.random.seed(1)
     np.random.shuffle(indices)  # Make sure to shuffle indices for randomness
 
     train_size = int(0.8 * total_size)
@@ -343,8 +344,8 @@ def get_dataloaders(ds, do_aug=True):
     global PREFETCH_FACTOR # load in advance
     global TEST_BATCH_SIZE
     PREFETCH_FACTOR = 4 
-    NUM_WORKERS = 8
-    TEST_BATCH_SIZE = 256
+    NUM_WORKERS = 4 # same as cores
+    TEST_BATCH_SIZE = 64
     transforms_dict = get_transforms(ds)
     if not do_aug:
         transforms_dict = {}
