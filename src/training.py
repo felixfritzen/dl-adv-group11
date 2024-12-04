@@ -304,7 +304,7 @@ def main(args):
 
     metrics_checkpoint_path = f"{args.dataset}_{args.experiment}_metrics_checkpoint.pth"
     fig_path = f"{args.dataset}_{args.experiment}_plot_metrics.png"
-    dataloaders = datasets.get_dataloaders(args.dataset)
+    dataloaders = datasets.get_dataloaders(args.dataset, perc=args.perc)
 
     student = models.resnet18(pretrained=False).to(device)
     student.fc = nn.Linear(student.fc.in_features, num_classes).to(device)
@@ -313,20 +313,18 @@ def main(args):
         print(f"Resuming training from: {args.resume}")
         checkpoint = torch.load(args.resume, map_location=lambda storage, loc: storage.cuda(0))
         student.load_state_dict(checkpoint)
-        try: # get epoch from path
-            start_epoch = utils.path2num(args.resume)
-        except:
-            print("No epoch in path")
-            start_epoch = 1
         try:
             metrics = torch.load(EXPERIMENT_PATH+metrics_checkpoint_path)
             print("Loaded metrics from checkpoint.")
-            start_epoch = metrics['epoch'][-1]
-            last_epoch = metrics.get('epoch', []) 
+            last_epoch = metrics.get('epoch_train', []) 
             if last_epoch:  
                 start_epoch = last_epoch[-1]
             else:
                 start_epoch = 1
+            try: # get epoch from path
+                start_epoch = utils.path2num(args.resume)
+            except:
+                print("No epoch in path")
         except FileNotFoundError:
             print("Metrics checkpoint not found. Initializing empty metrics.")
             metrics = empty_metric()
@@ -355,11 +353,6 @@ def main(args):
     # Optimizer and Scheduler
     optimizer = torch.optim.AdamW(student.parameters(), lr=args.lr, weight_decay=1e-4)
 
-    tunable_params = [p for p in student.parameters() if p.requires_grad]
-    # print("Tunable Parameters:")
-    # for param in tunable_params:
-    #     print(param.size())
-
     scheduler = SequentialLR(
     optimizer,
     schedulers=[
@@ -383,97 +376,101 @@ def main(args):
     # Initialize live plotting
     plt.ion()  # Turn on interactive mode
     # Training loop
-    for epoch in range(start_epoch-1, args.epochs+1):
+    if start_epoch == 1: # do eval before training
+        range_= range(start_epoch-1, args.epochs+1)
+    else:
+        range_=range(start_epoch+1, args.epochs+1) #loaded
+    if args.train:
+        for epoch in range_:
+            if early_stop:
+                print("Early stopping triggered. Stopping training.")
+                break
+            
+            print(f"Epoch {epoch}/{args.epochs}")
 
-        if early_stop:
-            print("Early stopping triggered. Stopping training.")
-            break
-        
-        print(f"Epoch {epoch}/{args.epochs}")
+            if epoch!=0: # calculate baseline first
+                train_loss, train_top1_acc, train_top5_acc = train_epoch(
+                    student, teacher, dataloaders[args.set], optimizer, scheduler, num_classes,
+                    gradcam_student=gradcam_student, gradcam_teacher=gradcam_teacher,
+                    temperature=args.temperature, lambda_weight=args.lambda_weight,
+                    experiment=args.experiment
+                )
+            
+                print(f"Train Loss: {train_loss:.4f}, Train Top-1 Acc: {train_top1_acc:.4f}, Train Top-5 Acc: {train_top5_acc:.4f}")
+                metrics["train_top1_acc"].append(train_top1_acc)
+                metrics["train_top5_acc"].append(train_top5_acc)
+                metrics["epoch_train"].append(epoch)
 
-        if epoch!=0: # calculate baseline first
-            train_loss, train_top1_acc, train_top5_acc = train_epoch(
-                student, teacher, dataloaders[args.set], optimizer, scheduler, num_classes,
-                gradcam_student=gradcam_student, gradcam_teacher=gradcam_teacher,
-                temperature=args.temperature, lambda_weight=args.lambda_weight,
-                experiment=args.experiment
-            )
-        
-            print(f"Train Loss: {train_loss:.4f}, Train Top-1 Acc: {train_top1_acc:.4f}, Train Top-5 Acc: {train_top5_acc:.4f}")
-            metrics["train_top1_acc"].append(train_top1_acc)
-            metrics["train_top5_acc"].append(train_top5_acc)
-            metrics["epoch_train"].append(epoch)
+            if epoch%args.evalstep==0: # do not eval each epoch
+                metrics["epoch_eval"].append(epoch)
+                if teacher:
+                    if has_id_ood:
+                        agreement_id = calculate_agreement(student, teacher, dataloaders['val_id'])
+                        print(f"In-Distribution Agreement with Teacher: {agreement_id:.4f}")
 
-        if epoch%args.evalstep==0: # do not eval each epoch
-            metrics["epoch_eval"].append(epoch)
-            if teacher:
-                if has_id_ood:
-                    agreement_id = calculate_agreement(student, teacher, dataloaders['val_id'])
-                    print(f"In-Distribution Agreement with Teacher: {agreement_id:.4f}")
+                        agreement_ood = calculate_agreement(student, teacher, dataloaders['val_ood'])
+                        print(f"Out-of-Distribution Agreement with Teacher: {agreement_ood:.4f}")
 
-                    agreement_ood = calculate_agreement(student, teacher, dataloaders['val_ood'])
-                    print(f"Out-of-Distribution Agreement with Teacher: {agreement_ood:.4f}")
-
-                    # Append average agreement for plotting
-                    avg_agreement = (agreement_id + agreement_ood) / 2
-                    metrics["agreement"].append(avg_agreement)
+                        # Append average agreement for plotting
+                        avg_agreement = (agreement_id + agreement_ood) / 2
+                        metrics["agreement"].append(avg_agreement)
+                    else:
+                        # Generic agreement calculation
+                        agreement = calculate_agreement(student, teacher, dataloaders['val'])
+                        print(f"Agreement with Teacher: {agreement:.4f}")
+                        metrics["agreement"].append(agreement)
                 else:
-                    # Generic agreement calculation
-                    agreement = calculate_agreement(student, teacher, dataloaders['val'])
-                    print(f"Agreement with Teacher: {agreement:.4f}")
-                    metrics["agreement"].append(agreement)
-            else:
-                # Append a placeholder if teacher is not used
-                metrics["agreement"].append(0.0)
+                    # Append a placeholder if teacher is not used
+                    metrics["agreement"].append(0.0)
 
-            # Evaluate for Waterbirds (ID/OOD) or default behavior
-            if has_id_ood:
-                id_top1_acc, id_top5_acc = evaluate(student, dataloaders['val_id'], num_classes)
-                ood_top1_acc, ood_top5_acc = evaluate(student, dataloaders['val_ood'], num_classes)
-                print(f"In-Distribution Top-1 Accuracy: {id_top1_acc:.4f}, Top-5 Accuracy: {id_top5_acc:.4f}")
-                print(f"Out-of-Distribution Top-1 Accuracy: {ood_top1_acc:.4f}, Top-5 Accuracy: {ood_top5_acc:.4f}")
-                metrics["val_top1_acc"].append(id_top1_acc)  # Use ID accuracy as val accuracy
-                metrics["val_top5_acc"].append(id_top5_acc)
-                val_top1_acc =id_top1_acc
-            else:
-                val_top1_acc, val_top5_acc = evaluate(student, dataloaders['val'], num_classes)
-                print(f"Validation Top-1 Accuracy: {val_top1_acc:.4f}, Top-5 Accuracy: {val_top5_acc:.4f}")
-                metrics["val_top1_acc"].append(val_top1_acc)
-                metrics["val_top5_acc"].append(val_top5_acc)
+                # Evaluate for Waterbirds (ID/OOD) or default behavior
+                if has_id_ood:
+                    id_top1_acc, id_top5_acc = evaluate(student, dataloaders['val_id'], num_classes)
+                    ood_top1_acc, ood_top5_acc = evaluate(student, dataloaders['val_ood'], num_classes)
+                    print(f"In-Distribution Top-1 Accuracy: {id_top1_acc:.4f}, Top-5 Accuracy: {id_top5_acc:.4f}")
+                    print(f"Out-of-Distribution Top-1 Accuracy: {ood_top1_acc:.4f}, Top-5 Accuracy: {ood_top5_acc:.4f}")
+                    metrics["val_top1_acc"].append(id_top1_acc)  # Use ID accuracy as val accuracy
+                    metrics["val_top5_acc"].append(id_top5_acc)
+                    val_top1_acc =id_top1_acc
+                else:
+                    val_top1_acc, val_top5_acc = evaluate(student, dataloaders['val'], num_classes)
+                    print(f"Validation Top-1 Accuracy: {val_top1_acc:.4f}, Top-5 Accuracy: {val_top5_acc:.4f}")
+                    metrics["val_top1_acc"].append(val_top1_acc)
+                    metrics["val_top5_acc"].append(val_top5_acc)
 
-            if val_top1_acc > metrics['best_loss']:
-                metrics['best_loss'] = val_top1_acc
-                epochs_no_improve = 0
+                if val_top1_acc > metrics['best_loss']:
+                    metrics['best_loss'] = val_top1_acc
+                    epochs_no_improve = 0
 
-                # Save the best model
-                best_model_path = EXPERIMENT_PATH+f"best_student_model_{args.dataset}_{args.experiment}.pth"  
-                torch.save(student.state_dict(), best_model_path)
-                print(f"New best model saved: {best_model_path}")
-            else:
-                epochs_no_improve += 1
-                print(f"No improvement in validation accuracy for {epochs_no_improve} epoch(s).")
+                    # Save the best model
+                    best_model_path = EXPERIMENT_PATH+f"best_student_model_{args.dataset}_{args.experiment}.pth"  
+                    torch.save(student.state_dict(), best_model_path)
+                    print(f"New best model saved: {best_model_path}")
+                else:
+                    epochs_no_improve += 1
+                    print(f"No improvement in validation accuracy for {epochs_no_improve} epoch(s).")
 
-            if epochs_no_improve >= patience:
-                print(f"Validation accuracy did not improve for {patience} epochs. Early stopping.")
-                early_stop = True
+                if epochs_no_improve >= patience:
+                    print(f"Validation accuracy did not improve for {patience} epochs. Early stopping.")
+                    early_stop = True
 
-        plot_metrics_live(metrics, save_path=EXPERIMENT_PATH+fig_path)
-        logging_path = EXPERIMENT_PATH+f'metrics/'
-        os.makedirs(logging_path, exist_ok=True)
-        torch.save(metrics, logging_path+f"{epoch}_"+metrics_checkpoint_path)#log
-        torch.save(metrics, EXPERIMENT_PATH+metrics_checkpoint_path)
-        # Early Stopping Check
-        # Save Grad-CAM heatmaps every 15 epochs
-        if args.experiment == "e2KD" and epoch % 15 == 0:
-            pass#plot_gradcam_heatmaps(student, teacher, dataloaders['val'], gradcam_student, gradcam_teacher, epoch + 1)
+            plot_metrics_live(metrics, save_path=EXPERIMENT_PATH+fig_path)
+            logging_path = EXPERIMENT_PATH+f'metrics/'
+            os.makedirs(logging_path, exist_ok=True)
+            torch.save(metrics, logging_path+f"{epoch}_"+metrics_checkpoint_path)#log
+            torch.save(metrics, EXPERIMENT_PATH+metrics_checkpoint_path)
+            # Early Stopping Check
+            # Save Grad-CAM heatmaps every 15 epochs
+            if args.experiment == "e2KD" and epoch % 15 == 0:
+                pass#plot_gradcam_heatmaps(student, teacher, dataloaders['val'], gradcam_student, gradcam_teacher, epoch + 1)
 
-        # Save the model every 10 epochs
-        if (epoch) % 10 == 0:
-            model_path = EXPERIMENT_PATH+f"student_model_{args.dataset}_{args.experiment}_epoch_{epoch + 1}.pth"
-            torch.save(student.state_dict(), model_path)
-            print(f"Model saved: {model_path}")
+            # Save the model every 10 epochs
+            if (epoch) % 10 == 0:
+                model_path = EXPERIMENT_PATH+f"student_model_{args.dataset}_{args.experiment}_epoch_{epoch}.pth"
+                torch.save(student.state_dict(), model_path)
+                print(f"Model saved: {model_path}")
 
-    plt.ioff()  
+        plt.ioff()  
 
     # Test evaluation
     if has_id_ood:
@@ -499,6 +496,15 @@ def main(args):
         torch.save(student.state_dict(), model_name)
         print(f"Final model saved as '{model_name}'.")
 
+    with open(EXPERIMENT_PATH+f"results_{args.experiment}.txt", "a") as file:
+        file.write(f"\n{args.perc, start_epoch}")
+        if has_id_ood:
+            file.write(f"{[(test_id_top1_acc, test_id_top5_acc,agreement_id),(test_ood_top1_acc, test_ood_top5_acc, agreement_ood)]}")
+        else:
+            file.write(f"{[(test_top1_acc, test_top5_acc, agreement)]}")
+        
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training script for baseline, KD, and e2KD experiments.")
     parser.add_argument("--dataset", required=True, choices=["imagenet", "waterbirds", "camelyon"], help="Dataset to use.")
@@ -510,8 +516,11 @@ if __name__ == "__main__":
     parser.add_argument("--resume", type=str, default=None, help="Path to a saved model to resume training.")
     parser.add_argument("--device", type=int, default=0, help="Device 0,1,2,3")
     parser.add_argument("--set", type=str, default='train', help="Set to train on")
-    parser.add_argument("--nr", type=int, default=0, help="Experiment number")
+    parser.add_argument("--nr", type=str, default='0', help="Experiment number")
     parser.add_argument("--evalstep", type=int, default=1, help="How often do eval")
+    parser.add_argument('--perc', type=float, default=0, help="Do random noise 0-1")
+    parser.add_argument('--train', type=int, default=1, help="Train or not")
+
     args = parser.parse_args()
 
     print('threads: ',torch.get_num_threads())
