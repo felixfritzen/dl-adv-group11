@@ -206,4 +206,50 @@ def path2num(path):
     number = re.search(r"epoch_(\d+)", path)
     return int(number.group(1))
 
+def parse_data(filename):
+    noise = []
+    acc_top1 = []
+    acc_top5 = []
+    agreement = []
+    
+    with open(filename, 'r') as file:
+        for line in file:
+            if not line.strip() or "KD" in line or "e2KD" in line:
+                continue
+            line = line.strip()
+            cleaned_data = re.findall(r'([\d., ]+)', line)
+            cleaned_data =",".join(cleaned_data)
+            cleaned_data = cleaned_data.split(',')
+            print(cleaned_data)
 
+            noise.append(float(cleaned_data[0]))
+            acc_top1.append(float(cleaned_data[2]))
+            acc_top5.append(float(cleaned_data[3]))
+            agreement.append(float(cleaned_data[4]))
+    return noise, acc_top1, acc_top5, agreement
+
+
+def plot_noise(kd_file,e2kd_file, path = 'noise.png'):
+    kd_noise, kd_acc_top1, kd_acc_top5, kd_agreement = parse_data(kd_file)
+    e2kd_noise, e2kd_acc_top1, e2kd_acc_top5, e2kd_agreement = parse_data(e2kd_file)
+
+    plt.figure(figsize=(12, 6))
+
+    plt.plot(kd_noise, kd_acc_top1, label="KD Top-1 Accuracy", marker='o')
+    plt.plot(kd_noise, kd_acc_top5, label="KD Top-5 Accuracy", marker='s')
+    plt.plot(kd_noise, kd_agreement, label="KD Agreement", marker='^')
+
+
+    plt.plot(e2kd_noise, e2kd_acc_top1, label="e2KD Top-1 Accuracy", marker='o', linestyle='--')
+    plt.plot(e2kd_noise, e2kd_acc_top5, label="e2KD Top-5 Accuracy", marker='s', linestyle='--')
+    plt.plot(e2kd_noise, e2kd_agreement, label="e2KD Agreement", marker='^', linestyle='--')
+
+    plt.xlabel("Noise Level")
+    plt.ylabel("Metrics")
+    plt.title("Comparison of KD and e2KD Metrics Across Noise Levels")
+    plt.legend()
+    plt.grid(True)
+
+    # Show Plot
+    plt.savefig(path)
+    plt.show()

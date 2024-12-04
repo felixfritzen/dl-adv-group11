@@ -258,7 +258,7 @@ def get_loaders_patchcamelyon(transforms, splits=['train', 'valid', 'test'], bat
 
 
 ############### General #############
-def get_transforms(ds):
+def get_transforms(ds, perc=None):
     """Transformations used in dataloaders, no random in eval dataloaders"""
     transforms_dict={}
     mean = (0.485, 0.456, 0.406)
@@ -337,16 +337,41 @@ def get_transforms(ds):
 
     else:
         print('Not valid dataset')
+
+    if perc:
+        transform1 = transforms.Compose([
+            RandomPixelWhite(perc=perc)
+        ])
+
+        transforms_dict['eval'] = transforms.Compose(
+            transforms_dict['eval'].transforms + transform1.transforms
+        )
     return transforms_dict
 
-def get_dataloaders(ds, do_aug=True):
+class RandomPixelWhite:
+    def __init__(self, perc):
+        self.perc = perc
+
+    def __call__(self, img):
+        if isinstance(img, torch.Tensor):
+            img = img.numpy() 
+        c, h, w = img.shape
+        total_pixels = h * w
+        white_pixels = np.random.choice(total_pixels, int(self.perc*total_pixels), replace=False)
+        for idx in white_pixels:
+            y, x = divmod(idx, w) 
+            img[:, y, x] = 1.0 
+        return torch.tensor(img)
+
+
+def get_dataloaders(ds, do_aug=True, perc=None):
     global NUM_WORKERS # parallell dataloading
     global PREFETCH_FACTOR # load in advance
     global TEST_BATCH_SIZE
     PREFETCH_FACTOR = 4 
     NUM_WORKERS = 4 # same as cores
     TEST_BATCH_SIZE = 64
-    transforms_dict = get_transforms(ds)
+    transforms_dict = get_transforms(ds, perc)
     if not do_aug:
         transforms_dict = {}
         mean = (0.485, 0.456, 0.406)
