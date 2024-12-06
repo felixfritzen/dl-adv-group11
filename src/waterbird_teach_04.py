@@ -7,14 +7,16 @@ from torchvision import models
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from localization_losses import get_localization_loss
-
+import os
 # Check for GPU
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-
 device = torch.device("cuda:1") 
-
 print(f"Using device: {device}")
+
+#Save paths
+MODEL_PATH = "/home/shared_project/dl-adv-group11/src/experiments/waterbirds/5/"
+FIGURE_PATH = MODEL_PATH
+os.makedirs(MODEL_PATH, exist_ok=False)
 
 # Load dataloaders
 dataloaders = datasets.datasets.get_dataloaders("waterbirds")
@@ -28,12 +30,12 @@ model.fc = nn.Linear(model.fc.in_features, 2)  # Update final layer for binary c
 model = model.to(device)
 
 # Load fine-tuned weights
-fine_tuned_weights_path = "resnet50_finetuned_epoch_50.pth"  # Path to your pretrained model
+fine_tuned_weights_path ="dl-adv-group11/models/pretrained/xdnn/xfixup_resnet50_model_best.pth.tar"  # Path to your pretrained model
 model.load_state_dict(torch.load(fine_tuned_weights_path, map_location=device))
 
 # Freeze all layers except the final one
 for param in model.parameters():
-    param.requires_grad = True 
+    param.requires_grad = False
 for param in model.fc.parameters():
     param.requires_grad = True  # Only fine-tune the final fully connected layer
 
@@ -48,13 +50,13 @@ optimizer = optim.Adam(model.parameters(), lr=1e-4)
 lambda_loc =1e-3
 
 # Training settings
-epochs = 200
+epochs = 151
 save_interval = 50
 train_loss_list, train_acc_list = [], []
 id_val_loss_list, id_val_acc_list = [], []
 ood_val_loss_list, ood_val_acc_list = [], []
 
-for epoch in range(epochs):
+for epoch in range(1,epochs):
     # Training Phase
     model.train()
     train_loss = 0.0
@@ -136,10 +138,10 @@ for epoch in range(epochs):
 
     # Save model every `save_interval` epochs
     if (epoch + 1) % save_interval == 0:
-        torch.save(model.state_dict(), f'new_resnet50_finetuned_epoch_augdata_unfrozen+{epoch+1}.pth')
+        torch.save(model.state_dict(), f"{MODEL_PATH}resnet50_finetuned_augdata_fc50+{epoch+1}.pth")
 
 # Save the final model
-torch.save(model.state_dict(), 'new_resnet50_finetuned_final_unfrozen_augmented_200epoker.pth')
+torch.save(model.state_dict(), MODEL_PATH +'resnet50_augmented_fc_200epokerPP.pth')
 print("Final model saved successfully!")
 
 # Plotting Training and Validation Metrics
@@ -155,7 +157,7 @@ plt.ylabel('Accuracy')
 plt.title('Accuracy Over Epochs')
 plt.legend()
 plt.grid(True)
-plt.savefig("new_accuracy_plot_augdata_nolocloss.png", dpi=200, bbox_inches='tight')  # Save accuracy plot
+plt.savefig(FIGURE_PATH +"new_accuracy_plot_augdata_nolocloss.png", dpi=200, bbox_inches='tight')  # Save accuracy plot
 
 # Loss Plot
 plt.figure(figsize=(10, 5))
@@ -167,6 +169,6 @@ plt.ylabel('Loss')
 plt.title('Loss Over Epochs')
 plt.legend()
 plt.grid(True)
-plt.savefig("new_loss_plot_augdata_nolocloss.png", dpi=200, bbox_inches='tight')  # Save loss plot
+plt.savefig(FIGURE_PATH +"new_loss_plot_augdata_nolocloss.png", dpi=200, bbox_inches='tight')  # Save loss plot
 
 print("Training complete and plots saved!")

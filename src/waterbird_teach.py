@@ -24,7 +24,7 @@ class ResNet50XDNN(nn.Module):
     def forward(self, x):
         return self.resnet50(x)
 
-model = ResNet50XDNN('xdnn/xfixup_resnet50_model_best.pth.tar').to(device)
+model = ResNet50XDNN('/home/shared_project/dl-adv-group11/models/pretrained/xdnn/xfixup_resnet50_model_best.pth.tar').to(device)
 
 for param in model.resnet50.parameters():
     param.requires_grad = True  # Freeze all layers

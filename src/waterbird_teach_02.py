@@ -19,7 +19,7 @@ dataloaders = datasets.datasets.get_dataloaders('waterbirds')
 model = xfixup_resnet50(num_classes=2)  # Final layer outputs 2 classes
 
 # Load pre-trained weights
-checkpoint = torch.load('xdnn/xfixup_resnet50_model_best.pth.tar', map_location=torch.device('cpu'))
+checkpoint = torch.load('/home/shared_project/dl-adv-group11/models/pretrained/xdnn/xfixup_resnet50_model_best.pth.tar', map_location=torch.device('cpu'))
 state_dict = checkpoint['state_dict'] if 'state_dict' in checkpoint else checkpoint
 
 # Clean up the state_dict by removing 'module.' prefix if present
