@@ -48,13 +48,13 @@ def demo_waterbirds_acc():
     # values for ["700 epochs OOD", "700 epochs ID", "+5x training OOD", "+5x training ID"]
     accuracy_data = {
         "KD": [38.74, 92.72, 38.74, 92.72],
-        "e$^2$KD": [34.65, 91.13, 34.65, 91.13]
+        "e$^2$KD": [37.3, 93.3, 37.3, 93.3]
     }
     agreement_data = {
         "KD": [59.96, 93.96, 59.96, 93.96],
-        "e$^2$KD": [58.23, 94.06, 58.23, 94.06]
+        "e$^2$KD": [61.93, 95.13, 61.93, 95.13]
     }
-    utils.plot_waterbirds_result(accuracy_data, agreement_data, './figs/waterbirds/wb_result.png')
+    utils.plot_waterbirds_result(accuracy_data, agreement_data, '/home/shared_project/dl-adv-group11/src/experiments/waterbirds/final/wb_result.png')
 
 
 def main(): 

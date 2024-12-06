@@ -208,9 +208,13 @@ def path2num(path):
 
 def parse_data(filename):
     noise = []
-    acc_top1 = []
-    acc_top5 = []
-    agreement = []
+    acc_top1_id = []
+    acc_top5_id = []
+    acc_top1_ood = []
+    agreement_id = []
+    agreement_ood = []
+
+    outp =[]
     
     with open(filename, 'r') as file:
         for line in file:
@@ -223,26 +227,45 @@ def parse_data(filename):
             print(cleaned_data)
 
             noise.append(float(cleaned_data[0]))
-            acc_top1.append(float(cleaned_data[2]))
-            acc_top5.append(float(cleaned_data[3]))
-            agreement.append(float(cleaned_data[4]))
-    return noise, acc_top1, acc_top5, agreement
+            acc_top1_id.append(float(cleaned_data[2]))
+            acc_top5_id.append(float(cleaned_data[3]))
+            agreement_id.append(float(cleaned_data[4]))
+            if len(cleaned_data)==10:
+                acc_top1_ood.append(float(cleaned_data[7]))
+                agreement_ood.append(float(cleaned_data[9]))
+                print('here')
+        if len(cleaned_data)==10:
+            outp = [noise, acc_top1_id, acc_top5_id, agreement_id, acc_top1_ood, agreement_ood]
+        else:
+            outp = [noise, acc_top1_id, acc_top5_id, agreement_id]
+    return outp
 
 
-def plot_noise(kd_file,e2kd_file, path = 'noise.png'):
-    kd_noise, kd_acc_top1, kd_acc_top5, kd_agreement = parse_data(kd_file)
-    e2kd_noise, e2kd_acc_top1, e2kd_acc_top5, e2kd_agreement = parse_data(e2kd_file)
+def plot_noise(kd_file,e2kd_file, path = 'noise.png', ds = 'waterbirds'):
+
+    #kd_noise, kd_acc_top1, kd_acc_top5, kd_agreement = parse_data(kd_file)
+    #e2kd_noise, e2kd_acc_top1, e2kd_acc_top5, e2kd_agreement = parse_data(e2kd_file)
+    outp_kd =parse_data(kd_file)
+    outp_e2kd = parse_data(e2kd_file)
 
     plt.figure(figsize=(12, 6))
 
-    plt.plot(kd_noise, kd_acc_top1, label="KD Top-1 Accuracy", marker='o')
-    plt.plot(kd_noise, kd_acc_top5, label="KD Top-5 Accuracy", marker='s')
-    plt.plot(kd_noise, kd_agreement, label="KD Agreement", marker='^')
+    plt.plot(outp_kd[0], outp_kd[1], label="KD Top-1 Accuracy", marker='o')
+    plt.plot(outp_e2kd[0], outp_e2kd[1], label="e2KD Top-1 Accuracy", marker='o', linestyle='--')
 
-
-    plt.plot(e2kd_noise, e2kd_acc_top1, label="e2KD Top-1 Accuracy", marker='o', linestyle='--')
-    plt.plot(e2kd_noise, e2kd_acc_top5, label="e2KD Top-5 Accuracy", marker='s', linestyle='--')
-    plt.plot(e2kd_noise, e2kd_agreement, label="e2KD Agreement", marker='^', linestyle='--')
+    if ds == 'imagenet':
+        plt.plot(outp_kd[0], outp_kd[2], label="KD Top-5 Accuracy", marker='s')
+        plt.plot(outp_e2kd[0], outp_e2kd[2], label="e2KD Top-5 Accuracy", marker='s', linestyle='--')
+    
+    if ds == 'waterbirds':
+        plt.plot(outp_kd[0], outp_kd[4], label="KD Top-1 Accuracy ood", marker='o')
+        plt.plot(outp_e2kd[0], outp_e2kd[4], label="e2KD Top-1 Accuracy ood", marker='o', linestyle='--')
+    
+    plt.plot(outp_kd[0], outp_kd[3], label="KD Agreement", marker='^')
+    plt.plot(outp_e2kd[0], outp_e2kd[3], label="e2KD Agreement", marker='^', linestyle='--')
+    if ds == 'waterbirds':
+        plt.plot(outp_kd[0], outp_kd[5], label="KD Agreement ood", marker='^')
+        plt.plot(outp_e2kd[0], outp_e2kd[5], label="e2KD Agreement ood", marker='^', linestyle='--')
 
     plt.xlabel("Noise Level")
     plt.ylabel("Metrics")
