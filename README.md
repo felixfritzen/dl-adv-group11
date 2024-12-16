@@ -1,5 +1,11 @@
 # DD2412 Group 11 Project
-
+### Code description:
+All code are found in `src/` folder
+- `training.py` has main training script
+- `datasets/datasets.py` has our dataset functions
+- `Heatmap_guidedteach.py` has heatmap generating part
+- `waterbird_teach_04.py` trains the teachers
+- `utils.py` has general help functions
 ### Project Links:
 <!-- - [GCP Vertex AI: Code](https://console.cloud.google.com/vertex-ai/workbench/instances?project=dladvgroup11) -->
 - [GCP VM (west4-c): Code](https://console.cloud.google.com/compute/instances?project=dladvgroup11)
