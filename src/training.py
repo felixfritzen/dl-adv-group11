@@ -295,7 +295,7 @@ def main(args):
     
 
     global EXPERIMENT_PATH 
-    EXPERIMENT_PATH = f"/home/shared_project/dl-adv-group11/src/experiments/{args.dataset}/{args.nr}/"
+    EXPERIMENT_PATH = f"/home/shared_project/dl-adv-group11/src/experiments/test/{args.dataset}/{args.nr}/"
     os.makedirs(EXPERIMENT_PATH, exist_ok=True)
 
     if not os.path.exists(EXPERIMENT_PATH+'desc.txt'):
@@ -336,9 +336,10 @@ def main(args):
     print(f"Starting from epoch: {start_epoch}")
     teacher = None
     gradcam_teacher = gradcam_student = None
-    if args.experiment in ["kd", "e2KD"]:
+    if args.experiment in ["kd", "e2KD", "baseline"]:
         if args.dataset == "imagenet":
             teacher = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1).to(device)
+            student = teacher
             #teacher.fc = nn.Linear(teacher.fc.in_features, num_classes).to(device)
         elif args.dataset == "camelyon":
             teacher = pcam_teacher()
